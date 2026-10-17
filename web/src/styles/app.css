@@ -1416,42 +1416,47 @@ tr.is-changed::after { inset: 0; }
           klinik: bisa dijangkau ibu jari tanpa mengubah cengkeraman.
      ========================================================== */
 
-  .app-header { flex-wrap: nowrap; gap: var(--sp-2);
+  .app-header { flex-wrap: wrap; gap: var(--sp-2) var(--sp-3); align-items: center;
                 padding-left: max(var(--sp-3), env(safe-area-inset-left));
                 padding-right: max(var(--sp-3), env(safe-area-inset-right)); }
   .app-header .search { display: none; }     /* sudah dihapus dari navbar */
 
-  /* KOREKSI: versi sebelumnya menyembunyikan nama klinik dan nama
-     petugas demi menghemat ruang. Itu salah. Di aplikasi rekam medis
-     keduanya bukan hiasan — "klinik mana" dan "siapa yang mencatat"
-     adalah bagian dari akuntabilitas. Menghapusnya demi hemat sekitar
-     60px adalah transaksi yang terlalu mahal.
+  /* NAVBAR DUA BARIS DI PONSEL — pilihan yang benar.
+     Versi sebelumnya memaksa satu baris lalu memotong nama klinik
+     jadi "KLINIK KHUSUS LUKA LU…". Itu pilihan salah.
 
-     Yang dikompresi, bukan dihapus:
-       - sub-brand (alamat/telepon) disembunyikan — bukan penanda
-       - peran di bawah nama disembunyikan — sudah ada di menu akun
-       - tombol ⚙ disembunyikan — sudah ada di menu akun, route sama
+     Perhitungannya sederhana dan tidak bisa dibantah: nama klinik
+     butuh 242px. Dalam satu baris ia hanya mendapat 162px, karena
+     chip akun memakan 150px. Tapi pada baris pertama yang khusus
+     untuk nama klinik, ruangnya 316px — lebih dari cukup. Yang tidak
+     muat bukan dua baris; yang tidak muat adalah memaksakan lima
+     unsur ke dalam satu baris.
 
-     Pembagian ruang dihitung dari pengukuran, bukan perkiraan:
-     nama klinik perlu 242px penuh, chip akun 150px, logo 38px,
-     celah 16px, tepi 24px — total 470px, sedangkan layar 390px.
-     Jadi pemotongan dengan ellipsis tidak bisa dihindari; yang bisa
-     DIPILIH adalah siapa yang dipotong. Dipilih: nama petugas tampil
-     utuh (82px, muat penuh), nama klinik dipotong lebih dulu karena
-     isinya sama untuk semua pengguna — tidak ada yang perlu membacanya
-     lebih cepat daripada siapa yang sedang memakai aplikasi ini. */
-  .brand { flex: 1 1 auto; min-width: 0; gap: var(--sp-2); }
-  .brand__title { font-size: 12.5px; max-width: none; }  /* flex yang memotong */
+     Konsekuensi yang harus diterima terang-terangan: navbar naik dari
+     62px ke 108px, dan navbar itu ada di SETIAP halaman. Jadi biayanya
+     46px per layar, dibayar terus-menerus. Itu mahal, tapi lebih murah
+     daripada separuh nama klinik hilang di setiap layar — dan jauh
+     lebih murah daripada menghapus peran serta tombol ⚙ yang
+     sebelumnya ikut hilang bersama.
+
+     Sekarang muat semua, tanpa dipotong apa pun:
+       - nama klinik utuh (242px dari 316px)
+       - nama petugas + peran "Administrator / Admin" kembali
+       - tombol ⚙ Pengaturan kembali ke tempatnya
+
+     Hanya yang tetap disembunyikan: sub-brand "Rekam Medis &
+     Manajemen Klinis..." — itu kalimat donosasi yang sudah lengkap
+     terlihat di halaman login, bukan penanda identitas. */
+  .app-header__spacer { display: block; flex: 1 1 auto; min-width: 0; }
+  .brand { flex: 1 1 100%; min-width: 0; gap: var(--sp-2); }
+  .brand__title { font-size: 13px; max-width: none; }
   .user-chip__text { display: flex; }
-  .user-chip__role { display: none; }
-  .user-chip__name { font-size: 12.5px; max-width: 86px; overflow: hidden;
+  .user-chip__role { display: block; }
+  .user-chip__name { font-size: 12.5px; max-width: 140px; overflow: hidden;
                      text-overflow: ellipsis; white-space: nowrap; }
-  /* Tombol ⚙ disembunyikan di ponsel karena tujuannya sudah ada di menu
-     akun: "Data & Cadangan" membuka /pengaturan, route yang sama persis.
-     Jadi tidak ada fungsi yang hilang, hanya satu tombol yang jarang
-     diklik bertahun-tahun sekali. 37px-nya dikembalikan ke nama klinik.
-     Desktop tidak tersentuh — tombol ini tetap utuh di layar lebar. */
-  .app-header .btn--ghost { display: none; }
+  .app-header .btn--ghost { display: inline-flex; padding: var(--sp-2) var(--sp-3);
+                            font-size: 12.5px; }
+  .app-header .btn--ghost .btn__label { display: inline; }
 
   /* ----------------------------------------------------------
      PATIENT BAR DI PONSEL
