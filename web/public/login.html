@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="color-scheme" content="light">
+<title>Masuk — WoundCare EHR</title>
+<link rel="icon" type="image/png" href="assets/images/logo.png">
+<link rel="stylesheet" href="assets/css/style.css">
+<link rel="stylesheet" href="assets/css/login.css">
+</head>
+<body class="login-body">
+
+<main class="login-wrap">
+  <div class="login-card">
+    <div class="login-brand">
+      <img class="login-logo" src="assets/images/logo.png" alt="Logo Lukumu Lukaku Cimahi">
+      <div>
+        <div class="login-org">KLINIK KHUSUS LUKA LUKAMU LUKAKU</div>
+        <div class="login-sub">WoundCare EHR · Rekam Medis &amp; Manajemen Klinis</div>
+      </div>
+    </div>
+
+    <h1 class="login-title">Masuk ke sistem</h1>
+    <p class="login-desc">Gunakan akun petugas yang diberikan administrator klinik.</p>
+
+    <form id="login-form" novalidate>
+      <div class="field">
+        <label class="field__label" for="username">Username</label>
+        <input type="text" id="username" name="username" autocomplete="username"
+               autocapitalize="none" spellcheck="false" placeholder="mis. slamet" required>
+      </div>
+
+      <div class="field" style="margin-top:14px">
+        <label class="field__label" for="password">Sandi</label>
+        <div class="pw-wrap">
+          <input type="password" id="password" name="password" autocomplete="current-password" required>
+          <button type="button" class="pw-toggle" id="pw-toggle" aria-label="Tampilkan sandi">👁</button>
+        </div>
+      </div>
+
+      <div class="login-error" id="login-error" hidden></div>
+
+      <button type="submit" class="btn btn--primary btn--block login-submit" id="login-submit">
+        Masuk
+      </button>
+    </form>
+
+    <div class="login-hint" id="login-hint">
+      <strong>Akun percobaan</strong>
+      <div class="login-creds">
+        <button type="button" class="cred" data-u="admin" data-p="woundcare123">
+          <span class="cred__u">admin</span><span class="cred__p">Administrator</span></button>
+        <button type="button" class="cred" data-u="slamet" data-p="woundcare123">
+          <span class="cred__u">slamet</span><span class="cred__p">Dokter</span></button>
+        <button type="button" class="cred" data-u="perawat" data-p="woundcare123">
+          <span class="cred__u">perawat</span><span class="cred__p">Perawat</span></button>
+      </div>
+      <div class="login-hint__note">Klik salah satu untuk mengisi otomatis. Ganti sandi setelah masuk.</div>
+    </div>
+
+    <div class="login-foot">
+      Data rekam medis tersimpan pada server lokal klinik.
+      <span id="server-name"></span>
+    </div>
+  </div>
+</main>
+
+<script src="assets/js/login.js"></script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+node_modules/
+.env
+.env.local
+.env*.local
+
+# Hasil build Vite
+web/dist/
+
+# Basis data SQLite lama — sudah dimigrasikan ke PostgreSQL.
+# JANGAN pernah commit ini ke repo publik: isinya rekam medis.
+data/
+*.db
+*.db-wal
+*.db-shm
+
+.DS_Store
+Thumbs.db
+*.log

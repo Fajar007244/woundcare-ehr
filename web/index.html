@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f766e" />
+  <title>WoundCare EHR</title>
+  <link rel="icon" type="image/png" href="/assets/images/logo.png" />
+
+  <!--
+    Dua berkas gaya, urutan dan atributnya WAJIB sama dengan index.html versi
+    lama:
+
+      style.css  → gaya layar
+      print.css → gaya cetak (hanya saat printer aktif)
+
+    print.css tidak boleh hilang dan tidak boleh diubah: ia yang mengatur
+    @page A4, kop surat, tabel cetak, gambar foto, dan — yang paling penting —
+    menyembunyikan #screen-root supaya yang tercetak hanya dokumen, bukan
+    seluruh antarmuka aplikasi.
+  -->
+  <link rel="stylesheet" href="/src/styles/app.css" />
+  <link rel="stylesheet" href="/src/styles/print.css" media="print" />
+
+  <!--
+    Modul klasik: BERKASNYA SAMA PERSIS dengan assets/js/ versi lama dan
+    TIDAK diubah satu byte pun. Urutannya wajib dipertahankan karena
+    print.js memakai UI pada saat modul dievaluasi, bukan saat dipanggil.
+
+    JANGAN mengubah berkas ini menjadi import di dalam modul React, karena
+    itu membuat ketujuh modul saling tidak melihat.
+  -->
+  <script src="/lib/scales.js"></script>
+  <script src="/lib/api.js"></script>
+  <script src="/lib/ui.js"></script>
+  <script src="/lib/store.js"></script>
+  <script src="/lib/photos.js"></script>
+  <script src="/lib/charts.js"></script>
+  <script src="/lib/logo.js"></script>
+  <script src="/lib/print.js"></script>
+  <script src="/lib/globals.js"></script>
+</head>
+<body>
+
+  <!-- ============ CHROME APLIKASI (disembunyikan saat cetak) ============ -->
+  <div id="screen-root">
+    <div id="root"></div>
+  </div><!-- /#screen-root -->
+
+  <div id="print-root"></div>
+
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "name": "woundcare-ehr",
+  "version": "1.0.0",
+  "private": true,
+  "description": "WoundCare EHR - Rekam medis & manajemen klinis perawatan luka",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "build": "npm --prefix web run build",
+    "dev": "npm --prefix web run dev",
+    "migrate": "node migrate-sqlite.cjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "pg": "^8.13.1"
+  }
+}
