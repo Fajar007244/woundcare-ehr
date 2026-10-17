@@ -1417,7 +1417,7 @@ tr.is-changed::after { inset: 0; }
   .app-header { flex-wrap: nowrap; gap: var(--sp-2); }
   .app-header .search { display: none; }     /* pindah ke Daftar Pasien */
   .search-inline { display: block; margin-bottom: var(--sp-3); }
-  .search-inline input { width: 100%; }
+  .search-inline input { width: 100%; min-height: 44px; }
   .brand__text { display: none; }            /* logo saja */
   .user-chip__text { display: none; }        /* avatar saja */
   .app-header .btn--ghost { padding: var(--sp-2) var(--sp-3); font-size: 12.5px; }
@@ -1494,6 +1494,11 @@ tr.is-changed::after { inset: 0; }
   /* Target kecil lain yang sering diketuk */
   .user-chip__caret { padding: 8px 4px; }
   .icon-btn { min-width: 44px; min-height: 44px; }
+
+  /* Isian formulir termasuk. Tanpa ini kotak pencarian di ponsel
+     hanya setinggi 42px — dua piksel di bawah standar, dan justru
+     kotak itu yang paling sering dipakai perawat. */
+  input, select, textarea { min-height: 44px; }
 }
 
 /* Tablet: snugga area sentuh sedikit, target tetap di bawah 44px

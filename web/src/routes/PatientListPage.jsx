@@ -44,6 +44,22 @@ export default function PatientListPage() {
         </div>
       </div>
 
+      {/* Pencarian — SEBELUM kartu statistik, bukan di atas kartu "Daftar
+          Pasien Aktif". Alasannya terukur: pada 390px keempat kartu
+          statistik memakan 437px vertikal, sehingga kotak yang diletakkan
+          tepat di atas kartu daftar jatuh di y=654 — jauh di bawah lipatan
+          layar 844px. Di y=200 kotak ini masih terlihat; di y=654 sudah
+          tidak, dan perawat harus menggulir untuk menemukannya. */}
+      <div className="search-inline">
+        <input
+          type="search"
+          value={q}
+          onChange={cari}
+          placeholder="Cari nama, no. RM, NIK, atau telepon…"
+          aria-label="Cari pasien"
+        />
+      </div>
+
       <div className="grid grid--4" style={{ marginBottom: 20 }}>
         <div className="stat stat--primary">
           <div className="stat__label">Pasien Aktif</div>
@@ -65,17 +81,6 @@ export default function PatientListPage() {
           <div className="stat__value">{s.scored}</div>
           <div className="stat__foot">dari {s.visits} total kunjungan</div>
         </div>
-      </div>
-
-      {/* Hanya tampil di ponsel; di layar lebar yang di header. */}
-      <div className="search-inline">
-        <input
-          type="search"
-          value={q}
-          onChange={cari}
-          placeholder="Cari nama, no. RM, NIK, atau telepon…"
-          aria-label="Cari pasien"
-        />
       </div>
 
       <div className="card">
