@@ -4,7 +4,8 @@
   "services": {
     "api": {
       "root": ".",
-      "runtime": "node"
+      "runtime": "node",
+      "entrypoint": "api/index.js"
     },
     "web": {
       "root": "web",
