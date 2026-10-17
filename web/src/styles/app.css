@@ -1416,11 +1416,42 @@ tr.is-changed::after { inset: 0; }
           klinik: bisa dijangkau ibu jari tanpa mengubah cengkeraman.
      ========================================================== */
 
-  .app-header { flex-wrap: nowrap; gap: var(--sp-2); }
+  .app-header { flex-wrap: nowrap; gap: var(--sp-2);
+                padding-left: max(var(--sp-3), env(safe-area-inset-left));
+                padding-right: max(var(--sp-3), env(safe-area-inset-right)); }
   .app-header .search { display: none; }     /* sudah dihapus dari navbar */
-  .brand__text { display: none; }            /* logo saja */
-  .user-chip__text { display: none; }        /* avatar saja */
-  .app-header .btn--ghost { padding: var(--sp-2) var(--sp-3); font-size: 12.5px; }
+
+  /* KOREKSI: versi sebelumnya menyembunyikan nama klinik dan nama
+     petugas demi menghemat ruang. Itu salah. Di aplikasi rekam medis
+     keduanya bukan hiasan — "klinik mana" dan "siapa yang mencatat"
+     adalah bagian dari akuntabilitas. Menghapusnya demi hemat sekitar
+     60px adalah transaksi yang terlalu mahal.
+
+     Yang dikompresi, bukan dihapus:
+       - sub-brand (alamat/telepon) disembunyikan — bukan penanda
+       - peran di bawah nama disembunyikan — sudah ada di menu akun
+       - tombol ⚙ disembunyikan — sudah ada di menu akun, route sama
+
+     Pembagian ruang dihitung dari pengukuran, bukan perkiraan:
+     nama klinik perlu 242px penuh, chip akun 150px, logo 38px,
+     celah 16px, tepi 24px — total 470px, sedangkan layar 390px.
+     Jadi pemotongan dengan ellipsis tidak bisa dihindari; yang bisa
+     DIPILIH adalah siapa yang dipotong. Dipilih: nama petugas tampil
+     utuh (82px, muat penuh), nama klinik dipotong lebih dulu karena
+     isinya sama untuk semua pengguna — tidak ada yang perlu membacanya
+     lebih cepat daripada siapa yang sedang memakai aplikasi ini. */
+  .brand { flex: 1 1 auto; min-width: 0; gap: var(--sp-2); }
+  .brand__title { font-size: 12.5px; max-width: none; }  /* flex yang memotong */
+  .user-chip__text { display: flex; }
+  .user-chip__role { display: none; }
+  .user-chip__name { font-size: 12.5px; max-width: 86px; overflow: hidden;
+                     text-overflow: ellipsis; white-space: nowrap; }
+  /* Tombol ⚙ disembunyikan di ponsel karena tujuannya sudah ada di menu
+     akun: "Data & Cadangan" membuka /pengaturan, route yang sama persis.
+     Jadi tidak ada fungsi yang hilang, hanya satu tombol yang jarang
+     diklik bertahun-tahun sekali. 37px-nya dikembalikan ke nama klinik.
+     Desktop tidak tersentuh — tombol ini tetap utuh di layar lebar. */
+  .app-header .btn--ghost { display: none; }
 
   /* --- Bottom navigation --- */
   .tabs {

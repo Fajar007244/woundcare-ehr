@@ -166,8 +166,11 @@ function Header() {
          semua perangkat, tidak pernah ada dobel. */}
       <div className="app-header__spacer"></div>
       {user && user.peran === 'Admin' ? (
+        /* Label dipisah agar bisa disembunyikan sendiri di ponsel (hanya
+           ikon), sementara di layar lebar tetap tertulis penuh. Title
+           tetap ada, jadi pembaca layar tetap tahu ini tombol apa. */
         <button className="btn btn--ghost" onClick={() => nav('/pengaturan')} title="Pengaturan &amp; cadangan data">
-          ⚙ Pengaturan
+          ⚙<span className="btn__label"> Pengaturan</span>
         </button>
       ) : null}
       <UserMenu user={user} unsynced={unsynced} onLogout={logout} />
