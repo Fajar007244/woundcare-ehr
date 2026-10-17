@@ -1098,6 +1098,22 @@ tr.is-changed::after { inset: 0; }
   /* Badge sinkronisasi dibuat saat runtime; urutan dijaga tetap di samping
      tombol, sebelum chip akun. */
   .sync-bar { order: 4; }
+
+  /* PENTING untuk ponsel: lepaskan wrapper sebagai konteks penempatan.
+     .user-menu memakai right:0, yang diukur dari .user-menu-wrap. Di
+     layar sempit header membungkus (flex-wrap), sehingga chip bisa mendarat
+     di kiri — diukur pada x=16px. Menu selebar 260px lalu memanjang ke
+     x=-94, yaitu 94px DI LUAR layar, dan seluruh isinya tak terjangkau.
+
+     Dengan position:static, konteksnya jadi .app-header (position:sticky)
+     yang lebarnya sepanjang layar, sehingga right:0 selalu menempel di tepi
+     kanan viewport, berapa pun posisi chip. */
+  .user-menu-wrap { position: static; }
+  .user-menu {
+    /* Pengaman tambahan: walau viewport sangat sempit (mode split atau
+       zoom besar), menu tetap tidak boleh keluar layar. */
+    max-width: calc(100vw - 16px);
+  }
 }
 
 /* ---------------------------------------------------------
@@ -1324,6 +1340,78 @@ tr.is-changed::after { inset: 0; }
   .form-row--2, .form-row--3, .form-row--4, .form-row--5 { grid-template-columns: minmax(0, 1fr); }
   .winner-table td.scale-item { width: auto; }
   .table-responsive { overflow-x: auto; }
+}
+
+/* ==========================================================
+   PONSEL
+   ----------------------------------------------------------
+   Aturan khusus perangkat sentuh, terpisah dari @media width
+   di atas. Alasannya: sebuah tablet bisa selebar 1024px tapi
+   tetap disentuh dengan jari, dan ponsel bisa 430px tapi
+   memakai tetikus. Keduanya perlu handled.
+
+   ACARA: smartphone adalah perangkat utama perawat di ruang
+   perawatan — bukan kebetulan. Jadi target sentuh dan zoom
+   input diperlakukan serius, bukan tambahan opsional.
+   ========================================================== */
+
+@media (max-width: 860px) {
+
+  /* Input di bawah 16px bikin iOS MEMZOOM saat difokuskan, dan layar
+     tidak kembali sendiri saat ditutup — user harus mencubit untuk
+     memperkecil. 16px adalah batas yang disengaja, bukan sekadar
+     Preference visual. */
+  input[type="text"], input[type="password"], input[type="number"],
+  input[type="date"], input[type="time"], input[type="search"],
+  input[type="tel"], input[type="datetime-local"], input[type="url"],
+  select, textarea {
+    font-size: 16px;
+  }
+  input[type="date"], input[type="time"] { min-height: 44px; }
+
+  /* Ponsel ber-notch punya area yang tertutup status bar / gesture bar.
+     env() mengembalikan 0px di perangkat tanpa notch, jadi aman
+     dipasang tanpa syarat. */
+  .app-header { padding-left: max(var(--sp-4), env(safe-area-inset-left));
+                padding-right: max(var(--sp-4), env(safe-area-inset-right)); }
+  .view { padding-bottom: calc(var(--sp-4) + env(safe-area-inset-bottom)); }
+
+  /* Cegah ketukan ganda membesarkan halaman, dan hilangkan kedipan
+     biru/default saat menyentuh elemen. */
+  .btn, .tab, .user-chip, .user-menu__item { touch-action: manipulation; }
+  .btn, .tab, .user-chip, .user-menu__item, .chip {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Menu akun jadi sheet penuh di ponsel: menempel ke tepi kanan layar,
+     tidak mungkin meluber, dan jarinya punya ruang lega. */
+  .user-menu { padding: 8px; }
+}
+
+/* Target sentuh. 44px adalah rekomendasi Apple HIG dan Material —
+   ukuran di bawah itu membuat jari salah mengenai tombol yang
+   bersebelahan, dan itu berbahaya di aplikasi rekam medis karena
+   salah ketuk bisa berarti salah ubah data. */
+@media (pointer: coarse) {
+  .btn,
+  .user-chip,
+  .user-menu__item,
+  .tabs .tab,
+  .chip {
+    min-height: 44px;
+  }
+  .btn--sm { min-height: 40px; }
+  .user-menu__item { padding: 12px 10px; }
+  .chip { padding: 10px 12px; }
+  /* Target kecil lain yang sering diketuk */
+  .user-chip__caret { padding: 8px 4px; }
+  .icon-btn { min-width: 44px; min-height: 44px; }
+}
+
+/* Tablet: snugga area sentuh sedikit, target tetap di bawah 44px
+   supaya layar tablet tidak jadi penuh tombol raksasa. */
+@media (pointer: coarse) and (min-width: 861px) {
+  .btn, .user-chip, .user-menu__item { min-height: 40px; }
 }
 
 /* Hide chrome on screen for print containers */
