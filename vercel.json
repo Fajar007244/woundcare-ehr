@@ -1,28 +1,25 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
 
-  "buildCommand": "npm install --prefix web && npm run build --prefix web",
-  "outputDirectory": "web/dist",
+  "services": {
+    "api": {
+      "root": ".",
+      "runtime": "node"
+    },
+    "web": {
+      "root": "web",
+      "framework": "vite"
+    }
+  },
 
   "rewrites": [
-    { "source": "/api/:path*", "destination": "/api" },
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
-  ],
-
-  "headers": [
     {
-      "source": "/assets/(.*)",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
-      ]
+      "source": "/api/(.*)",
+      "destination": { "service": "api" }
     },
     {
-      "source": "/(.*)",
-      "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "X-Frame-Options", "value": "DENY" },
-        { "key": "Referrer-Policy", "value": "same-origin" }
-      ]
+      "source": "/((?!api/).*)",
+      "destination": { "service": "web" }
     }
   ]
 }

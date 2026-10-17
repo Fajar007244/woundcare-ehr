@@ -19,6 +19,11 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    sourcemap: true
+    /* Sourcemap TIDAK diaktifkan untuk build produksi.
+       Saat aktif ia menambah 1,79 MB ke folder dist — hampir 5x ukuran
+       JS-nya sendiri — dan karena ada di dist, Vercel menyajikannya
+       PUBLIK, sehingga kode React bisa direkonstruksi siapa saja.
+       Untuk build lokal yang perlu debugging, ubah ke true. */
+    sourcemap: false
   }
 });
