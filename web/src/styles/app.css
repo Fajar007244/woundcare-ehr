@@ -268,10 +268,12 @@ a { color: var(--c-primary); }
   background: var(--c-primary-soft);
 }
 
-/* Kotak cari milik halaman Daftar Pasien. Tampil hanya di ponsel —
-   di layar lebar pencarian tetap di header seperti sebelumnya, jadi
-   tidak ada dua kotak yang sama di satu layar. */
-.search-inline { display: none; }
+/* Kotak cari milik halaman Daftar Pasien, untuk SEMUA perangkat.
+   Sebelumnya hanya tampil di ponsel; sekarang juga di layar lebar,
+   karena kotak di navbar sudah dihapus. Satu tempat, satu tampilan,
+   tidak pernah ada dobel. */
+.search-inline { display: block; margin-bottom: var(--sp-4); }
+.search-inline input { width: 100%; min-height: 44px; }
 
 /* Ikon & label pendek HANYA untuk bottom navigation di ponsel.
    Disembunyikan di sini, dan hanya ditampilkan kembali di dalam
@@ -1415,9 +1417,7 @@ tr.is-changed::after { inset: 0; }
      ========================================================== */
 
   .app-header { flex-wrap: nowrap; gap: var(--sp-2); }
-  .app-header .search { display: none; }     /* pindah ke Daftar Pasien */
-  .search-inline { display: block; margin-bottom: var(--sp-3); }
-  .search-inline input { width: 100%; min-height: 44px; }
+  .app-header .search { display: none; }     /* sudah dihapus dari navbar */
   .brand__text { display: none; }            /* logo saja */
   .user-chip__text { display: none; }        /* avatar saja */
   .app-header .btn--ghost { padding: var(--sp-2) var(--sp-3); font-size: 12.5px; }

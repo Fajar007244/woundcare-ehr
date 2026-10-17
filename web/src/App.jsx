@@ -145,8 +145,6 @@ function UserMenu({ user, unsynced, onLogout }) {
 function Header() {
   const { clinic, user, unsynced, logout } = useData();
   const nav = useNavigate();
-  const [params, setParams] = useSearchParams();
-  const q = params.get('q') || '';
 
   useEffect(() => {
     const tutup = () => document.querySelector('.user-menu-wrap > .user-chip')?.classList.remove('is-open');
@@ -154,24 +152,19 @@ function Header() {
     return () => document.removeEventListener('click', tutup);
   }, []);
 
-  function cari(v) {
-    const p = new URLSearchParams(location.search);
-    if (v) p.set('q', v); else p.delete('q');
-    setParams(p);
-  }
-
   return (
     <header className="app-header">
       <Brand clinic={clinic} />
+      {/* Pencarian TIDAK lagi di navbar.
+         Alasannya terukur: pada ponsel, kotak search di navbar memaksa
+         header jadi tiga baris (brand+tombol, chip, kotak cari) —
+         hampir seperempat tinggi layar untuk navigasi saja. Di desktop
+         navbar jadi tiga kali tinggi isinya hanya untuk satu kotak.
+
+         Kotaknya kini milik halaman Daftar Pasien (lihat
+         routes/PatientListPage.jsx), tepat di bawah judul. Satu tempat,
+         semua perangkat, tidak pernah ada dobel. */}
       <div className="app-header__spacer"></div>
-      <div className="search">
-        <input
-          type="search"
-          value={q}
-          placeholder="Cari nama, no. RM, NIK, atau telepon…"
-          onChange={e => cari(e.target.value)}
-        />
-      </div>
       {user && user.peran === 'Admin' ? (
         <button className="btn btn--ghost" onClick={() => nav('/pengaturan')} title="Pengaturan &amp; cadangan data">
           ⚙ Pengaturan
