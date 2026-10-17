@@ -44,7 +44,7 @@ const GLYPHS = {
 
   // Pengkajian Luka — garis nadi
   activity: (
-    <polyline points="2.5 12.5 7.5 12.5 10 6 14 18 16.5 12.5 21.5 12.5" />
+    <polyline points="2 12 6.5 12 9 3.5 13 20.5 15.5 12 22 12" />
   ),
 
   // Foto Luka
@@ -65,23 +65,28 @@ const GLYPHS = {
     </>
   ),
 
-  // Grafik Tren — garis naik
+  // Grafik Tren — garis naik. Versi pertama hanya setinggi 11 dari
+  // 24 satuan, jadi di layar 19px hanya 8.7px: jauh lebih kecil dan
+  // lebih pipih daripada ikon lain yang 15-19. Garisnya dibuat lebih
+  // curam supaya ruangnya sama dengan sisa ikon.
   trendingUp: (
     <>
-      <polyline points="21.5 6.5 13.5 14.5 9.5 10.5 2.5 17.5" />
-      <polyline points="16 6.5 21.5 6.5 21.5 12" />
+      <polyline points="2 20 8 13 13 17 22 5" />
+      <polyline points="15.5 5 22 5 22 11.5" />
     </>
   ),
 
   /* --- Menu akun --- */
 
-  // Ganti Sandi
+  // Ganti Sandi. Versi pertama punya pusat tinta di (12.5, 11.5),
+  // setengah piksel ke kanan dan ke atas. Dikgeser supaya tepat di
+  // tengah kotak 24x24, sama seperti ikon lain.
   key: (
     <>
-      <circle cx="8" cy="16" r="4" />
-      <path d="M10.8 13.2L21 3" />
-      <path d="M17 7l2.5 2.5" />
-      <path d="M14 10l2.5 2.5" />
+      <circle cx="7.5" cy="16.5" r="4" />
+      <path d="M10.3 13.7L20.5 3.5" />
+      <path d="M16.5 7.5l2.5 2.5" />
+      <path d="M13.5 10.5l2.5 2.5" />
     </>
   ),
 
