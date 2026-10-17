@@ -9,7 +9,8 @@
     },
     "web": {
       "root": "web",
-      "framework": "vite"
+      "framework": "vite",
+      "installCommand": "npm install"
     }
   },
 
