@@ -1100,7 +1100,9 @@ tr.is-changed::after { inset: 0; }
 .user-menu__item:disabled { opacity: .5; cursor: not-allowed; }
 .user-menu__item:disabled:hover { background: transparent; }
 .user-menu__sep { height: 1px; background: var(--c-border); margin: 6px 4px; }
-.user-menu__ico { width: 18px; text-align: center; flex: 0 0 18px; }
+/* Ikon menu: sekarang SVG, jadi lebarnya tetap 18px tapi tinggi
+   juga ikut dikunci agar tidak meregangkan baris menu. */
+.user-menu__ico { width: 18px; height: 18px; flex: 0 0 18px; }
 
 @media (max-width: 860px) {
   /* .user-chip adalah anak .user-menu-wrap, bukan anak langsung .app-header,
@@ -1580,7 +1582,7 @@ tr.is-changed::after { inset: 0; }
     background: var(--c-primary-soft);
     box-shadow: inset 0 3px 0 var(--c-primary);
   }
-  .tab__ico { display: block; font-size: 17px; line-height: 1; }
+  .tab__ico { display: block; }   /* SVG punya ukuran sendiri */
   .tab__label { display: none; }
   .tab__short { display: block; }
 

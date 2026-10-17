@@ -19,6 +19,7 @@ const el = (tag, attrs, kids) => {
 
 import { useData, usePatient } from './core/data.jsx';
 import { PatientBar, VisitPicker } from './components/patient-bar.jsx';
+import { Icon } from './components/icons.jsx';
 import { UI, Store, API, Photos, APP_LOGO, PrintDoc } from './lib/index.js';
 import { TABS, TAB_LIST } from './tabs/index.js';
 import { openAuditHistory, openAccessLog } from './core/overlays.jsx';
@@ -122,19 +123,19 @@ function UserMenu({ user, unsynced, onLogout }) {
             </div>
           </div>
           <button className="user-menu__item" onClick={() => { setBuka(false); gantiSandi(); }}>
-            <span className="user-menu__ico">🔑</span> Ganti Sandi
+            <Icon name="key" className="user-menu__ico" /> Ganti Sandi
           </button>
           <button className="user-menu__item" onClick={() => { setBuka(false); nav('/pengaturan'); }}>
-            <span className="user-menu__ico">🕓</span> Riwayat Akses Klinik
+            <Icon name="clock" className="user-menu__ico" /> Riwayat Akses Klinik
           </button>
           {admin ? (
             <button className="user-menu__item" onClick={() => { setBuka(false); nav('/pengaturan'); }}>
-              <span className="user-menu__ico">⚙</span> Data &amp; Cadangan
+              <Icon name="database" className="user-menu__ico" /> Data &amp; Cadangan
             </button>
           ) : null}
           <div className="user-menu__sep"></div>
           <button className="user-menu__item user-menu__item--danger" onClick={onLogout}>
-            <span className="user-menu__ico">⏻</span> Keluar
+            <Icon name="logOut" className="user-menu__ico" /> Keluar
           </button>
         </div>
       ) : null}
@@ -380,7 +381,7 @@ function PatientPage() {
             onClick={() => setTab(t.key)}
             aria-current={tab === t.key ? 'page' : undefined}
           >
-            <span className="tab__ico" aria-hidden="true">{t.icon}</span>
+            <Icon name={t.icon} size={19} className="tab__ico" />
             <span className="tab__label">{t.label}</span>
             <span className="tab__short">{t.short}</span>
           </button>
