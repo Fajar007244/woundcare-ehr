@@ -9,8 +9,19 @@ import { Badge } from '../components/ui.jsx';
 export default function PatientListPage() {
   const { patients } = useData();
   const nav = useNavigate();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const q = params.get('q') || '';
+
+  /* Kotak cari milik halaman ini, bukan header.
+     Alasannya: di ponsel kotak header disembunyikan supaya navbar cukup
+     satu baris — dan kalau tidak ada gantinya di sini, pencarian akan
+     hilang total di perangkat yang paling membutuhkannya. */
+  function cari(e) {
+    const v = e.target.value;
+    const p = new URLSearchParams(params);
+    if (v) p.set('q', v); else p.delete('q');
+    setParams(p, { replace: true });
+  }
 
   const s = Store.stats();
   const list = Store.search(q);
@@ -54,6 +65,17 @@ export default function PatientListPage() {
           <div className="stat__value">{s.scored}</div>
           <div className="stat__foot">dari {s.visits} total kunjungan</div>
         </div>
+      </div>
+
+      {/* Hanya tampil di ponsel; di layar lebar yang di header. */}
+      <div className="search-inline">
+        <input
+          type="search"
+          value={q}
+          onChange={cari}
+          placeholder="Cari nama, no. RM, NIK, atau telepon…"
+          aria-label="Cari pasien"
+        />
       </div>
 
       <div className="card">

@@ -19,14 +19,18 @@ import GrafikTab from './GrafikTab.jsx';
 
 /* Label persis sama dengan TABS di assets/js/app.js (baris 1352-1359).
    Pemisah titik, bukan titik tengah — dan tab kedua bernama
-   "Informed Consent", bukan "Persetujuan". */
+   "Informed Consent", bukan "Persetujuan".
+
+   `icon` & `short` hanya dipakai oleh bottom navigation di ponsel.
+   Di layar lebar keduanya disembunyikan lewat CSS, sehingga tampilan
+   desktop tetap persis seperti semula. */
 export const TAB_LIST = [
-  { key: 'identitas',  label: '1. Data Pasien' },
-  { key: 'consent',    label: '2. Informed Consent' },
-  { key: 'pengkajian', label: '3. Pengkajian Luka' },
-  { key: 'foto',       label: '4. Foto Luka' },
-  { key: 'winner',     label: '5. WINNER Scale' },
-  { key: 'grafik',     label: '6. Grafik Tren' }
+  { key: 'identitas',  label: '1. Data Pasien',      icon: '👤', short: 'Pasien' },
+  { key: 'consent',    label: '2. Informed Consent', icon: '📝', short: 'Consent' },
+  { key: 'pengkajian', label: '3. Pengkajian Luka',  icon: '🩹', short: 'Luka' },
+  { key: 'foto',       label: '4. Foto Luka',        icon: '📷', short: 'Foto' },
+  { key: 'winner',     label: '5. WINNER Scale',     icon: '📊', short: 'Skor' },
+  { key: 'grafik',     label: '6. Grafik Tren',      icon: '📈', short: 'Grafik' }
 ];
 
 export const TABS = {

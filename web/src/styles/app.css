@@ -268,6 +268,17 @@ a { color: var(--c-primary); }
   background: var(--c-primary-soft);
 }
 
+/* Kotak cari milik halaman Daftar Pasien. Tampil hanya di ponsel —
+   di layar lebar pencarian tetap di header seperti sebelumnya, jadi
+   tidak ada dua kotak yang sama di satu layar. */
+.search-inline { display: none; }
+
+/* Ikon & label pendek HANYA untuk bottom navigation di ponsel.
+   Disembunyikan di sini, dan hanya ditampilkan kembali di dalam
+   @media max-width: 860px. Efeknya: tampilan layar lebar tidak
+   berubah satu piksel pun dari versi sebelumnya. */
+.tab__ico, .tab__short { display: none; }
+
 /* ---------------------------------------------------------
    Forms
    --------------------------------------------------------- */
@@ -1386,6 +1397,83 @@ tr.is-changed::after { inset: 0; }
   /* Menu akun jadi sheet penuh di ponsel: menempel ke tepi kanan layar,
      tidak mungkin meluber, dan jarinya punya ruang lega. */
   .user-menu { padding: 8px; }
+
+  /* ==========================================================
+     HEMAT LAYAR VERTIKAL DI PONSEL
+     ----------------------------------------------------------
+     Pada 390px navbarduluan memakan empat baris (brand+tombol, chip,
+     kotak cari, strip tab) — hampir seperempat tinggi layar untuk
+     NAVIGASI saja, sebelum pengguna melihat satu baris isi pun.
+
+     Dua perbaikan, keduanya hanya di ponsel:
+       a) Header jadi SATU baris: logo saja, tombol Pengaturan, avatar.
+          Kotak cari pindah ke halaman Daftar Pasien (tempatnya memang
+          di situ), bukan hilang.
+       b) Strip tab turun ke dasar layar sebagai bottom navigation —
+          persis seperti aplikasi pada umumnya, dan yang penting di
+          klinik: bisa dijangkau ibu jari tanpa mengubah cengkeraman.
+     ========================================================== */
+
+  .app-header { flex-wrap: nowrap; gap: var(--sp-2); }
+  .app-header .search { display: none; }     /* pindah ke Daftar Pasien */
+  .search-inline { display: block; margin-bottom: var(--sp-3); }
+  .search-inline input { width: 100%; }
+  .brand__text { display: none; }            /* logo saja */
+  .user-chip__text { display: none; }        /* avatar saja */
+  .app-header .btn--ghost { padding: var(--sp-2) var(--sp-3); font-size: 12.5px; }
+
+  /* --- Bottom navigation --- */
+  .tabs {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 45;
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 0;
+    margin-bottom: 0;
+    border-bottom: 0;
+    border-top: 1px solid var(--c-border);
+    background: var(--c-surface);
+    box-shadow: 0 -2px 10px rgba(15, 23, 32, .10);
+    overflow: visible;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .tab {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-height: 0;
+    height: 58px;
+    padding: 4px 2px;
+    margin-bottom: 0;
+    border-bottom: 0;
+    border-radius: 0;
+    background: transparent;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1.1;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+  .tab.is-active {
+    border-bottom-color: transparent;
+    background: var(--c-primary-soft);
+    box-shadow: inset 0 3px 0 var(--c-primary);
+  }
+  .tab__ico { display: block; font-size: 17px; line-height: 1; }
+  .tab__label { display: none; }
+  .tab__short { display: block; }
+
+  /* Ruang supaya isi tidak tertutup bilah bawah. */
+  #view-patient {
+    padding-bottom: calc(58px + env(safe-area-inset-bottom));
+  }
 }
 
 /* Target sentuh. 44px adalah rekomendasi Apple HIG dan Material —

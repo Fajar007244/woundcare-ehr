@@ -38,7 +38,11 @@ function Brand({ clinic }) {
       <div className="brand__logo">
         <img src="/assets/images/logo.png" alt="Logo Lukumu Lukaku Cimahi" />
       </div>
-      <div>
+      {/* Wrapper ini WAJIB memakai kelas brand__text — CSS sudah
+          menyerobotnya (min-width:0, flex:1 1 auto) untuk membuat
+          teks memotong dengan elipsis, bukan memanjangkan navbar.
+          Tanpa kelas, judul klinik menabrak tombol Pengaturan. */}
+      <div className="brand__text">
         <div className="brand__title">{clinic.nama || 'WoundCare EHR'}</div>
         <div className="brand__sub">Rekam Medis &amp; Manajemen Klinis Perawatan Luka Modern</div>
       </div>
@@ -368,11 +372,21 @@ function PatientPage() {
         onOpenAudit={bukaAudit}
       />
 
-      {/* .tabs — bukan .tab-strip, itu tidak ada di style.css */}
+      {/* .tabs — bukan .tab-strip, itu tidak ada di style.css.
+          Di ponsel .tabs berubah jadi bottom navigation; ikon dan label
+          pendek Yang muncul di sana, sedangkan .tab__label (label
+          lengkap) disembunyikan CSS. Di layar lebar sebaliknya. */}
       <div id="tab-strip" className="tabs">
         {TAB_LIST.map(t => (
-          <button key={t.key} className={`tab${tab === t.key ? ' is-active' : ''}`} onClick={() => setTab(t.key)}>
-            {t.label}
+          <button
+            key={t.key}
+            className={`tab${tab === t.key ? ' is-active' : ''}`}
+            onClick={() => setTab(t.key)}
+            aria-current={tab === t.key ? 'page' : undefined}
+          >
+            <span className="tab__ico" aria-hidden="true">{t.icon}</span>
+            <span className="tab__label">{t.label}</span>
+            <span className="tab__short">{t.short}</span>
           </button>
         ))}
       </div>
