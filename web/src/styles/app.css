@@ -1453,6 +1453,84 @@ tr.is-changed::after { inset: 0; }
      Desktop tidak tersentuh — tombol ini tetap utuh di layar lebar. */
   .app-header .btn--ghost { display: none; }
 
+  /* ----------------------------------------------------------
+     PATIENT BAR DI PONSEL
+     ----------------------------------------------------------
+     Di layar lebar .patient-bar adalah satu baris flex yang rapat.
+     Di ponsel lima anaknya saling berebut lebar, dan hasilnya:
+     "← Daftar" menduduki baris yang sama dengan avatar, sehingga
+     avatar tampak milik tombolnya, bukan milik pasien — nama pun
+     turun ke baris sendiri, jauh dari inisialnya sendiri.
+
+     Yang diperbaiki, tanpa mengubah markup (urutan anak tetap sama
+     dengan renderPatientBar() di app.js lama):
+       - tombol kembali mendapat baris penuh di paling atas
+       - avatar menempel ke nama, disejajarkan ke baris teratas info
+       - "Riwayat Akses" naik ke barisnya sendiri, dua badge berbagi
+         satu baris evenly sehingga tidak saling salip
+       - "+ Kunjungan Baru" jadi tombol utama selebar baris
+       - semua tombol setinggi 44px
+
+     CATATAN UNTUK YANG BERIKUTNYA: jangan memakai display:contents
+     di sini lalu mengandalkan `order` untuk menentukan baris. Order
+     hanya mengurutkan, tidak memaksa ganti baris flex — percobaan itu
+     membuat badge masuk ke baris avatar, .patient-bar__info terjepit
+     jadi kolom ~50px, dan meta berubah jadi pita teks satu kata per
+     baris. Tinggi bar melonjak 232 -> 514px. Baris di sinieurat dijamin
+     oleh flex-basis:100%, bukan oleh urutan. */
+  .patient-bar {
+    gap: var(--sp-2) var(--sp-3);
+    padding: var(--sp-3);
+    align-items: flex-start;
+  }
+  .patient-bar > .btn {
+    order: 1; flex: 1 1 100%; max-width: max-content;
+    justify-content: flex-start; min-height: 44px;
+  }
+  .patient-bar__avatar {
+    order: 2; align-self: flex-start;
+    width: 42px; height: 42px; flex-basis: 42px;
+  }
+  .patient-bar__info { order: 3; flex: 1 1 0; min-width: 0; }
+  .patient-bar > .btn-group { order: 4; flex: 1 1 100%; }
+  .patient-bar__actions { order: 5; flex: 1 1 100%; }
+
+  /* Tombol "Riwayat Akses" mendapat barisnya sendiri, lalu dua badge
+     membagi lebar sama. Deterministik di semua lebar — tidak lagi
+     bergantung pada apakah tiga benda muat dalam satu baris. */
+  .patient-bar > .btn-group {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--sp-2);
+    align-items: center;
+  }
+  .patient-bar > .btn-group > .btn {
+    grid-column: 1 / -1;
+    justify-self: start; min-height: 44px;
+  }
+  /* Huruf badge dikecilkan sedikit supaya "Skor 20 · Sangat Ringan"
+     muat di kolom setengah pada 360px. Tanpa ini badge meluber. */
+  .patient-bar .badge { font-size: 11px; padding: 3px 8px; min-width: 0; }
+
+  /* "+ Kunjungan Baru" adalah aksi yang paling sering ditekan perawat.
+     Ia tetap tombol utama (isi pekat, bukan label saja), tapi TIDAK
+     dipaksa selebar baris: keduanya muat side by side hingga 360px
+     (130 + 134 + 8 = 272px dari 295px yang tersedia). Memaksanya
+     100% hanya menambah satu baris lagi tanpa menambah Hierarchy —
+     filled vs outline sudah cukup membedakan keduanya. */
+  .patient-bar__actions > .btn {
+    flex: 1 1 auto; min-height: 44px;
+  }
+
+  .patient-bar__name {
+    font-size: 16px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  /* Jejak akses disembunyikan di ponsel — isinya sudah tersedia di
+     tombol "Riwayat Akses" tepat di bawahnya. */
+  .patient-bar__access { display: none; }
+
   /* --- Bottom navigation --- */
   .tabs {
     position: fixed;

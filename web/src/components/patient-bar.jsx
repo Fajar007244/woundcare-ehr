@@ -49,11 +49,16 @@ export function PatientBar({ patient, visit, onBack, onNewVisit, onOpenAccessLog
             id.jenisKelamin || '?',
             `${UI.hitungUmur(id.tglLahir) ?? '?'} th`,
             `${s.total} kunjungan`,
-            s.lastVisitDate ? `terakhir ${UI.fmtDate(s.lastVisitDate)}` : '',
-            patient.lastAccess
-              ? `dibuka ${patient.lastAccess.oleh}, ${UI.fmtDate(String(patient.lastAccess.pada).slice(0, 10))}`
-              : ''
+            s.lastVisitDate ? `terakhir ${UI.fmtDate(s.lastVisitDate)}` : ''
           ].filter(Boolean).join(' · ')}
+          {/* Jejak akses dipisah supaya bisa disembunyikan di ponsel.
+              Di layar lebar teksnya persis sama seperti sebelumnya; di
+              ponsel disembunyikan karena information yang sama sudah ada
+              di tombol "Riwayat Akses" satu baris di bawahnya, dan
+             meta yang memanjang membuat bar tumbuh 3-4 baris. */}
+          {patient.lastAccess ? (
+            <span className="patient-bar__access">{' · '}dibuka {patient.lastAccess.oleh}, {UI.fmtDate(String(patient.lastAccess.pada).slice(0, 10))}</span>
+          ) : null}
         </div>
       </div>
 
