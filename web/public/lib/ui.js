@@ -272,6 +272,29 @@ const UI = (() => {
     });
   }
 
+  /** Pilih berkas -> Promise<{ name, size, buffer }> (biner mentah).
+   *
+   *  Dipakai pemulihan cadangan .zip. pickFile() di atas membaca lewat
+   *  readAsText, yang unsuitable untuk arsip berukuran besar: seluruhnya
+   *  diubah jadi string di memori sebelum satu byte pun dipakai. Di sini
+   *  yang dikembalikan baru ArrayBuffer-nya, dan teks hanya diurai kalau
+   *  memang yang dibutuhkan. */
+  function pickFileBuffer(accept = '.zip,.json,application/zip,application/json') {
+    return new Promise(resolve => {
+      const input = el('input', { type: 'file', accept, style: 'display:none' });
+      document.body.appendChild(input);
+      input.addEventListener('change', () => {
+        const f = input.files && input.files[0];
+        if (!f) { input.remove(); resolve(null); return; }
+        const r = new FileReader();
+        r.onload = () => { input.remove(); resolve({ name: f.name, size: f.size, buffer: r.result }); };
+        r.onerror = () => { input.remove(); resolve(null); };
+        r.readAsArrayBuffer(f);
+      });
+      input.click();
+    });
+  }
+
   /* ---------- Debounce ---------- */
   function debounce(fn, ms = 250) {
     let t;
@@ -285,6 +308,6 @@ const UI = (() => {
     $, $$, el, esc, toast, modal, confirm,
     showTip, hideTip, bindTips, lightbox,
     fmtDate, fmtDateTime, fmtDateShort, hitungUmur, initials, joinList, badge,
-    download, pickFile, debounce
+    download, pickFile, pickFileBuffer, debounce
   };
 })();

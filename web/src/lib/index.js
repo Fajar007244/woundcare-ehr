@@ -39,3 +39,4 @@ export const Photos = pick('Photos');
 export const Charts = pick('Charts');
 export const APP_LOGO = pick('APP_LOGO');
 export const PrintDoc = pick('PrintDoc');
+export const Backup = pick('Backup');

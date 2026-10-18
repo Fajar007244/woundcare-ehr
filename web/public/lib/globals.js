@@ -19,3 +19,7 @@ window.Photos = Photos;
 window.Charts = Charts;
 window.APP_LOGO = APP_LOGO;
 window.PrintDoc = PrintDoc;
+/* Pembaca arsip cadangan. Hanya dipakai saat memulihkan .zip, tapi
+   bentuknya sama dengan modul lain: IIFE yang menempelkan dirinya
+   ke window, jadi tetap lewat jembatan yang sama. */
+window.Backup = Backup;

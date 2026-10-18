@@ -474,7 +474,7 @@ const Store = (() => {
 
   function exportJSON() { return JSON.stringify(state, null, 2); }
 
-  function importJSON(json, { merge = false } = {}) {
+  function importJSON(json, { merge = false, fotoIds = null } = {}) {
     let incoming = json;
     /* Menerima teks JSON maupun objek yang sudah diurai. Halaman
        Pengaturan mengurai dan memvalidasi berkasnya lebih dulu supaya
@@ -496,7 +496,13 @@ const Store = (() => {
     incoming.patients.forEach(normalizePatient);
     const snap = { meta: { version: 1, clinic: (incoming.meta && incoming.meta.clinic) || state.meta.clinic }, patients: incoming.patients };
 
-    push('pulihkan cadangan', () => API.request('/api/bulk', { method: 'POST', body: { mode: merge ? 'merge' : 'replace', snapshot: snap } }));
+    /* `fotoIds` hanya diisi saat memulihkan arsip .zip: daftarnya id foto
+     yang ada di cadangan. Server memakainya untuk membuang foto LAMA
+     tanpa ikut membuang foto yang baru saja diunggah. */
+    push('pulihkan cadangan', () => API.request('/api/bulk', {
+      method: 'POST',
+      body: { mode: merge ? 'merge' : 'replace', snapshot: snap, fotoIds: fotoIds || null }
+    }));
     applySnapshot(snap);
     return { imported: incoming.patients.length, ok: true };
   }

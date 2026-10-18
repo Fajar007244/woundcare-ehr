@@ -16,6 +16,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('node:crypto');
+const { ZipWriter } = require('./backup-zip.js');
 
 /* ---------- Muat .env (KHUSUS LOKAL) ----------
  *
@@ -434,6 +435,95 @@ const routes = {
     json(res, 200, { last: await db.lastAccess(q.get('patientId') || '') });
   },
 
+  /* --- Cadangan .zip: manifest + foto, DIALIRKAN ---
+   *
+   * Ini jalur cadangan yang benar untuk data skala nyata.
+   *
+   * `GET /api/export` (JSON tunggal) masih ada dan tetap berguna untuk
+   * data kecil, tapi ia membungkus SETIAP foto sebagai base64 dalam satu
+   * respons. Base64 menambah 33%, dan Vercel membatasi badan permintaan
+   * serverless pada 4,5 MB — bukan 8 MB seperti batas yang ditetapkan
+   * readBody() di berkas ini. Suatu saat restaurar akan selalu gagal,
+   * bukan hanya pelan.
+   *
+   * Di sini foto menjadi berkas terpisah di dalam arsip, ditulis sambil
+   * mengalir: satu foto held di memori pada satu waktu, sisanya langsung
+   * ditulis ke koneksi. Panjang respons tidak dibatasi oleh ukuran ZIP,
+   * hanya oleh ukuran database.
+   */
+  'GET /api/backup.zip': async (req, res) => {
+    if (!await requireAdmin(req, res)) return;
+
+    const d = new Date();
+    const tgl = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    res.writeHead(200, {
+      'Content-Type': 'application/zip',
+      'Content-Disposition': `attachment; filename="woundcare-cadangan-${tgl}.zip"`,
+      'X-Content-Type-Options': 'nosniff',
+      'Cache-Control': 'no-store'
+    });
+
+    const z = new ZipWriter(res, { date: d });
+    try {
+      const snap = await db.backupManifest(await clinicConfig());
+      await z.add('manifest.json', Buffer.from(JSON.stringify(snap), 'utf8'));
+
+      const ekst = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+      let n = 0;
+      for await (const f of db.photoStream()) {
+        await z.add(`photos/${f.id}.${ekst[f.mime] || 'jpg'}`, f.bytes, f.dibuat);
+        n++;
+      }
+      await z.finish();
+      res.end();
+      console.log(`[api] backup.zip selesai: ${snap.patients.length} pasien, ${n} foto`);
+    } catch (e) {
+      console.error('[api] backup.zip', e);
+      // Header sudah terkirim, jadi tidak bisa kirim JSON error.
+      // Putuskan saja koneksi agar peramban tahu arsipnya tidak utuh.
+      try { res.destroy(); } catch (_) {}
+    }
+  },
+
+  /* --- Unggah satu foto saat memulihkan arsip ---
+   *
+   * Terpisah dari POST /api/photos yang biasa: yang itu untuk petugas
+   * mengunggah foto luka, sedangkan ini bagian dari pemulihan, jadi
+   * WAJIB admin dan tidak boleh mencatat akses per-pasien.
+   *
+   * Body-nya biner mentah, bukan JSON dan bukan multipart — multipart
+   * menambah lapisan yang tidak perlu dan ukurannya lebih besar.
+   */
+  'POST /api/backup/photos': async (req, res, q) => {
+    if (!await requireAdmin(req, res)) return;
+
+    const visitId = String(q.get('visitId') || '');
+    const kind = String(q.get('kind') || '');
+    if (!visitId) return json(res, 400, { error: 'Kunjungan tidak disebutkan.' });
+    if (KIND_FOTO.indexOf(kind) < 0) return json(res, 400, { error: 'Jenis foto tidak dikenal.' });
+
+    let bytes;
+    try { bytes = await readBinary(req); }
+    catch (e) { return json(res, 413, { error: e.message }); }
+    if (!bytes.length) return json(res, 400, { error: 'Isi foto kosong.' });
+
+    const mime = jenisGambar(bytes);
+    if (!mime) return json(res, 415, { error: 'Berkas bukan gambar JPEG atau PNG.' });
+
+    try {
+      const ref = await db.savePhotoFor(visitId, kind, {
+        mime,
+        bytes,
+        width: Number(q.get('width')) || 0,
+        height: Number(q.get('height')) || 0
+      });
+      json(res, 200, { ok: true, photo: ref });
+    } catch (e) {
+      console.error('[api] backup/photos', e);
+      json(res, 500, { error: 'Gagal menyimpan foto.' });
+    }
+  },
+
   /* --- Cadangan lengkap (foto disertakan sebagai base64) --- */
   'GET /api/export': async (req, res) => {
     if (!await requireAdmin(req, res)) return;
@@ -473,7 +563,12 @@ const routes = {
     const mode = b.mode === 'merge' ? 'merge' : 'replace';
     try {
       const sebelum = await db.stats();
-      const n = await db.replaceAll(snap, mode === 'merge');
+      /* fotoIds = daftar id foto yang ada di cadangan. Saat memulihkan
+         arsip .zip, foto sudah diunggah lewat /api/backup/photos lebih
+         dulu; daftar ini yang membuat replaceAll() membuang foto LAMA
+         tanpa ikut membuang foto yang baru saja dikirim. */
+      const fotoIds = Array.isArray(b.fotoIds) ? b.fotoIds.filter(x => typeof x === 'string') : null;
+      const n = await db.replaceAll(snap, mode === 'merge', { fotoIds });
       if (snap.meta && snap.meta.clinic) await db.saveClinicConfig(snap.meta.clinic, DEFAULT_CLINIC);
 
       /* Jejak audit untuk pemulihan.

@@ -758,14 +758,29 @@ async function snapshot(clinic) {
  * itu berarti server mati di tengah pemulihan -> database setengah terisi
  * tanpa jalan kembali. Di sini semua atau tidak sama sekali.
  */
-async function replaceAll(snap, merge = false) {
+async function replaceAll(snap, merge = false, opts = {}) {
   await ready();
   const client = await pool.connect();
   const q = (sql, params) => client.query(sql, params);
   try {
     await q('BEGIN');
     if (!merge) {
-      await q('DELETE FROM photos');
+      /* Foto diperlakukan berbeda dari tabel lain.
+       *
+       * Pada pemulihan dari .zip, foto SUDAH diunggah lebih dulu — bukan
+       * sebagai base64 di dalam snapshot, karena itu membuat satu
+       * permintaan melebihi batas 4,5 MB milik Vercel. Karena itu
+       * `DELETE FROM photos` di sini justru membuang foto yang baru saja
+       * dikirim, lalu rekam medisnya datang tanpa gambar.
+       *
+       * Yang benar: buang foto yang TIDAK ada di cadangan, sehingga yang
+       * tersisa persis isi cadangan.
+       */
+      if (Array.isArray(opts.fotoIds) && opts.fotoIds.length) {
+        await q('DELETE FROM photos WHERE id <> ALL($1::text[])', [opts.fotoIds]);
+      } else {
+        await q('DELETE FROM photos');
+      }
       await q('DELETE FROM audit_log');
       await q('DELETE FROM visits');
       await q('DELETE FROM consents');
@@ -845,6 +860,61 @@ async function exportSnapshot(clinic) {
     }
   }
   return snap;
+}
+
+/* ---------- Cadangan .zip: manifest + aliran foto ---------- */
+
+/**
+ * Manifest cadangan: snapshot() apa adanya (foto di dalamnya sudah
+ * berupa rujukan ringan, bukan base64) ditambah daftar foto.
+ *
+ * Daftar foto ini yang membuat pemulihan bisa bertahap: peramban
+ * membaca daftar ini, mengunggah setiap biner satu per satu, baru
+ * akhirnya mengirim manifest-nya.
+ */
+async function backupManifest(clinic) {
+  await ready();
+  const snap = await snapshot(clinic);
+  const rows = (await pool.query(
+    'SELECT id, visit_id, kind, mime, width, height, size FROM photos ORDER BY id'
+  )).rows;
+
+  snap.meta = snap.meta || {};
+  snap.meta.format = 'woundcare-zip-1';
+  snap.meta.dibuat = nowISO();
+  snap.meta.foto = rows.map(r => ({
+    id: r.id, visit_id: r.visit_id, kind: r.kind,
+    mime: r.mime, width: r.width, height: r.height, size: r.size
+  }));
+  snap.meta.totalFoto = rows.length;
+  snap.meta.totalFotoBytes = rows.reduce((a, r) => a + Number(r.size || 0), 0);
+  return snap;
+}
+
+/**
+ * Aliran foto satu per satu, dibaca dari database dalam berkas kecil.
+ * Dipakai agar penulisan .zip tidak pernah memegang lebih dari satu
+ * gambar di memori — inilah yang membuat arsip skala klinik mungkin.
+ */
+async function* photoStream(batchSize = 25) {
+  await ready();
+  let setelah = '';
+  for (;;) {
+    const r = await pool.query(
+      'SELECT id, mime, bytes, dibuat FROM photos WHERE id > $1 ORDER BY id LIMIT $2',
+      [setelah, batchSize]
+    );
+    if (!r.rows.length) return;
+    for (const row of r.rows) {
+      yield {
+        id: row.id,
+        mime: row.mime || 'image/jpeg',
+        dibuat: row.dibuat,
+        bytes: Buffer.isBuffer(row.bytes) ? row.bytes : Buffer.from(row.bytes)
+      };
+    }
+    setelah = r.rows[r.rows.length - 1].id;
+  }
 }
 
 /* ---------- Riwayat akses ---------- */
@@ -955,6 +1025,7 @@ async function saveClinicConfig(cfg, fallback) {
 
 module.exports = {
   open, ready, close, stats, snapshot, exportSnapshot,
+  backupManifest, photoStream,
   getClinicConfig, saveClinicConfig,
   hashPassword, verifyPassword,
   findUser, findUserById, listUsers, createUser, setPassword, setActive,

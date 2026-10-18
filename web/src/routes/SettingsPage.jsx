@@ -715,18 +715,15 @@ function exportCSV() {
 
 const KATA_GANTI = 'GANTI SEMUA';
 
-/** Baca dan periksa berkas cadangan. Melempar Error bila ditolak. */
-function telaahBerkas(nama, teks) {
-  let snap;
-  try { snap = JSON.parse(teks); }
-  catch (e) { throw new Error('Berkas bukan JSON yang valid.'); }
-
+/** Baca dan periksa isi cadangan. Melempar Error bila ditolak.
+ *  `snap` sudah diurai pemanggil; `fotoTersedia` hanya ada untuk arsip .zip. */
+function telaahBerkas(nama, snap, fotoTersedia) {
   if (!snap || typeof snap !== 'object' || !Array.isArray(snap.patients)) {
     throw new Error('Struktur berkas tidak dikenali — ini bukan cadangan WoundCare.');
   }
 
   /* Tanpa cek ini, berkas terpotong atau salah pilih tetap lolos:
-     yangshape-nya "patients" sudah benar. Padahal kalau mode-nya
+     yang bentuknya "patients" sudah benar. Padahal kalau mode-nya
      replace, database sudah dikosongkan duluan lalu nol baris
      mengisinya. */
   const tanpaId = snap.patients.filter(p => !p || typeof p !== 'object' || !p.id).length;
@@ -744,12 +741,50 @@ function telaahBerkas(nama, teks) {
       if (ps.after) foto++;
     }
   }
-  return { snap, nama, jumlah: { pasien: snap.patients.length, kunjungan, consent, foto } };
+
+  /* Arsip .zip yang biner fotonya tidak lengkap. Pemulihan tetap boleh
+     jalan, tapi harus jujur soal berapa yang akan hilang. */
+  const metaFoto = (snap.meta && Array.isArray(snap.meta.foto)) ? snap.meta.foto : null;
+  const kurangFoto = (fotoTersedia && metaFoto)
+    ? metaFoto.filter(f => !fotoTersedia.has(f.id)).length
+    : 0;
+
+  return {
+    snap, nama,
+    jumlah: { pasien: snap.patients.length, kunjungan, consent, foto },
+    metaFoto, kurangFoto
+  };
+}
+
+/** Unggah foto satu per satu, bukan semuanya dalam satu permintaan. */
+async function unggahFoto(metaFoto, fotoTersedia, progres) {
+  for (let i = 0; i < metaFoto.length; i++) {
+    const fm = metaFoto[i];
+    const data = fotoTersedia.get(fm.id);
+    if (!data) { progres(i + 1, metaFoto.length); continue; }
+
+    const qs = new URLSearchParams({
+      visitId: fm.visit_id, kind: fm.kind,
+      mime: fm.mime || 'image/jpeg',
+      width: fm.width || 0, height: fm.height || 0
+    });
+    const res = await fetch('/api/backup/photos?' + qs.toString(), {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: data.bytes
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      throw new Error(e.error || `Gagal mengunggah foto ${fm.id}.`);
+    }
+    progres(i + 1, metaFoto.length);
+  }
 }
 
 /** Dialog pilihan tiga arah. Menutup dialog apa pun berarti BATAL,
     bukan "ganti total" — itu inti perbaikannya. */
-function dialogPilihan(telaah, tabrakan) {
+function dialogPilihan(telaah, tabrakan, format) {
   return new Promise(resolve => {
     let done = false;
     const tutup = v => { done = true; m.close(); resolve(v); };
@@ -777,7 +812,14 @@ function dialogPilihan(telaah, tabrakan) {
               ? `GABUNG akan menimpa <b>${tabrakan}</b> pasien yang punya id sama — termasuk yang isinya lebih baru.`
               : 'Tidak ada id yang sama dengan data sekarang, jadi GABUNG hanya menambah.'}
           </div>
+          ${telaah.kurangFoto > 0
+            ? `<div class="callout callout--danger" style="margin-top:8px;font-size:12.5px">
+                 <b>Arsip tidak lengkap:</b> ${telaah.kurangFoto} foto yang disebut manifest tidak ada di dalam arsip.
+                 Kunjungan yang memakainya akan pulih tanpa gambar.
+               </div>`
+            : ''}
           <p style="margin:10px 0 0;font-size:12.5px;color:var(--c-text-muted)">
+            Sumber: <b>${format === 'zip' ? 'arsip .zip (foto terpisah)' : 'JSON (foto disisipkan sebagai base64)'}</b>.
             GANTI TOTAL menghapus seluruh pasien, kunjungan, foto, dan jejak audit yang ada sekarang.
           </p>`
       }),
@@ -833,6 +875,7 @@ function KartuCadangan({ patients, onSelesai }) {
   const [ukuranDb, setUkuranDb] = useState(null);
   const [mengunduh, setMengunduh] = useState(false);
   const [memulihkan, setMemulihkan] = useState(false);
+  const [progres, setProgres] = useState('');
 
   /* Ukuran diambil dari server: perhitungan di sisi klien tidak lagi
      akurat, karena foto sudah disimpan sebagai BLOB terpisah dan tidak
@@ -843,22 +886,33 @@ function KartuCadangan({ patients, onSelesai }) {
 
   /* Unduh keadaan SEKARANG juga, bukan hanya berkas yang diimpor.
      Dipakai baik untuk tombol Unduh, maupun otomatis tepat sebelum
-     pemulihan — supaya selalu ada jalan kembali. */
-  async function unduhSekarang(akhiran) {
+     pemulihan — supaya selalu ada jalan kembali.
+
+     Bentuk ZIP dipilih untuk daftar utama: foto jadi berkas terpisah di
+     dalam arsip, jadi ukurannya tidak meledak oleh base64 dan bisa
+     dipulihkan bertahap. JSON tetap tersedia untuk data kecil dan
+     untuk dua arah kompatibilitas dengan versi lama. */
+  async function unduhSekarang(akhiran, format = 'zip') {
+    const jam = new Date().toTimeString().slice(0, 8).replace(/:/g, '');
+    if (format === 'zip') {
+      const res = await fetch('/api/backup.zip', { credentials: 'same-origin' });
+      if (!res.ok) throw new Error('Gagal menyiapkan arsip cadangan.');
+      const blob = await res.blob();
+      UI.download(`woundcare-${akhiran}-${Store.today()}-${jam}.zip`, blob, 'application/zip');
+      return 'arsip .zip';
+    }
     const res = await fetch('/api/export', { credentials: 'same-origin' });
     if (!res.ok) throw new Error('Gagal mengambil cadangan dari server.');
     const teks = await res.text();
-    const jam = new Date().toTimeString().slice(0, 8).replace(/:/g, '');
-    const nama = `woundcare-${akhiran}-${Store.today()}-${jam}.json`;
-    UI.download(nama, teks, 'application/json');
-    return nama;
+    UI.download(`woundcare-${akhiran}-${Store.today()}-${jam}.json`, teks, 'application/json');
+    return 'berkas .json';
   }
 
-  async function ekspor() {
+  async function ekspor(format = 'zip') {
     setMengunduh(true);
     try {
-      await unduhSekarang('cadangan');
-      UI.toast('Cadangan diunduh', 'ok');
+      const what = await unduhSekarang('cadangan', format);
+      UI.toast('Cadangan diunduh (' + what + ')', 'ok');
     } catch (e) {
       UI.toast(e.message, 'danger');
     } finally {
@@ -867,34 +921,56 @@ function KartuCadangan({ patients, onSelesai }) {
   }
 
   async function impor() {
-    const f = await UI.pickFile();
+    const f = await UI.pickFileBuffer();
     if (!f) return;
 
     setMemulihkan(true);
     try {
-      /* 1 — validasi lokal, sebelum apa pun berubah di server */
-      const telaah = telaahBerkas(f.name, f.text);
+      /* 1 — baca berkas: arsip .zip atau JSON lama */
+      let snap, fotoTersedia = null, format = 'json';
+      /* Deteksi arsip lewat magic number "PK", bukan lewat nama berkas —
+         orang sering mengganti nama atau menyimpannya jadi .json. */
+      const buf = f.buffer;
+      const magic = new Uint8Array(buf, 0, Math.min(4, buf.byteLength));
+      const adaZip = magic.length >= 2 && magic[0] === 0x50 && magic[1] === 0x4B;
 
-      /* 2 — berapa id yang akan ditimpa */
+      if (adaZip) {
+        setProgres('Membaca arsip…');
+        const z = await Backup.bukaZip(f.buffer);
+        snap = z.manifest;
+        fotoTersedia = z.fotos;
+        format = 'zip';
+      } else {
+        let teks;
+        try { teks = new TextDecoder('utf-8').decode(f.buffer); }
+        catch (e) { throw new Error('Berkas bukan JSON yang valid.'); }
+        try { snap = JSON.parse(teks); }
+        catch (e) { throw new Error('Berkas bukan JSON yang valid.'); }
+      }
+
+      /* 2 — validasi isi, sebelum apa pun berubah di server */
+      const telaah = telaahBerkas(f.name, snap, fotoTersedia);
+
+      /* 3 — berapa id yang akan ditimpa */
       const idSekarang = new Set(patients.map(p => p.id));
       const tabrakan = telaah.snap.patients.filter(p => idSekarang.has(p.id)).length;
 
-      /* 3 — pilihan. Null = batal, dan batal selalu aman. */
-      const mode = await dialogPilihan(telaah, tabrakan);
+      /* 4 — pilihan. Null = batal, dan batal selalu aman. */
+      const mode = await dialogPilihan(telaah, tabrakan, format);
       if (!mode) return;
 
-      /* 4 — untuk ganti total, wajib mengetik ulang */
+      /* 5 — untuk ganti total, wajib mengetik ulang */
       if (mode === 'replace') {
         const yakin = await dialogKetikGanti();
         if (!yakin) return;
       }
 
-      /* 5 — cadangan otomatis dari kondisi SEKARANG, sebelum menulis.
+      /* 6 — cadangan otomatis dari kondisi SEKARANG, sebelum menulis.
          Ini yang membuat pemulihan bisa dibatalkan: bila hasilnya
          tidak sesuai, berkas ini yang dikembalikan. */
       try {
-        const namaCad = await unduhSekarang('pra-pulihkan');
-        UI.toast('Cadangan otomatis: ' + namaCad, 'ok', 4000);
+        const what = await unduhSekarang('pra-pulihkan', format === 'zip' ? 'zip' : 'json');
+        UI.toast('Cadangan otomatis tersimpan: ' + what, 'ok', 4000);
       } catch (e) {
         const tetap = await UI.confirm(
           'Gagal mengunduh cadangan otomatis.\n\nMelanjutkan tanpa cadangan berarti data sekarang tidak punya jalan kembali. Lanjutkan?',
@@ -903,11 +979,25 @@ function KartuCadangan({ patients, onSelesai }) {
         if (!tetap) return;
       }
 
-      /* 6 — baru benar-benar menulis */
-      const res = Store.importJSON(telaah.snap, { merge: mode === 'merge' });
+      /* 7 — unggah foto lebih dulu, satu per satu.
+         HARUS mendahului apply: saat mode replace, server menghapus
+         foto yang tidak ada di daftar cadangan. Kalau manifest dulu,
+         foto barunya ikut terhapus. */
+      if (telaah.metaFoto && telaah.metaFoto.length) {
+        setProgres('Mengunggah 0/' + telaah.metaFoto.length + ' foto…');
+        await unggahFoto(telaah.metaFoto, fotoTersedia, (selesai, total) => {
+          setProgres(`Mengunggah ${selesai}/${total} foto…`);
+        });
+        setProgres('');
+      }
+
+      /* 8 — baru benar-benar menulis */
+      const fotoIds = telaah.metaFoto ? telaah.metaFoto.map(x => x.id) : null;
+      const res = Store.importJSON(telaah.snap, { merge: mode === 'merge', fotoIds });
       UI.toast(`${res.imported} pasien dipulihkan`, 'ok');
       onSelesai();
     } catch (err) {
+      setProgres('');
       UI.toast(err.message, 'danger', 6000);
     } finally {
       setMemulihkan(false);
@@ -931,14 +1021,21 @@ function KartuCadangan({ patients, onSelesai }) {
         </p>
 
         <div className="btn-group" style={{ marginTop: 14 }}>
-          <button className="btn btn--primary" id="btn-export" onClick={ekspor} disabled={mengunduh}>
-            {mengunduh ? 'Menyiapkan…' : '⬇ Unduh Cadangan (JSON)'}
+          <button className="btn btn--primary" id="btn-export" onClick={() => ekspor('zip')} disabled={mengunduh || memulihkan}>
+            {mengunduh ? 'Menyiapkan…' : '⬇ Unduh Cadangan (.zip)'}
+          </button>
+          <button className="btn" id="btn-export-json" onClick={() => ekspor('json')} disabled={mengunduh || memulihkan}>
+            ⬇ Cadangan (.json)
           </button>
           <button className="btn" id="btn-import" onClick={impor} disabled={memulihkan}>
             {memulihkan ? 'Memulihkan…' : '⬆ Pulihkan dari Cadangan'}
           </button>
           <button className="btn" id="btn-export-csv" onClick={exportCSV}>⬇ Ekspor Kunjungan (CSV)</button>
         </div>
+
+        {progres ? (
+          <p className="field__hint" style={{ marginTop: 10 }}>{progres}</p>
+        ) : null}
       </div>
     </div>
   );
