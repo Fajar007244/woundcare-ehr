@@ -1353,6 +1353,29 @@ tr.is-changed::after { inset: 0; }
   .view { padding: var(--sp-4) var(--sp-3); }
   .grid--2, .grid--3, .grid--4 { grid-template-columns: minmax(0, 1fr); }
   .form-row--2, .form-row--3, .form-row--4, .form-row--5 { grid-template-columns: minmax(0, 1fr); }
+
+  /* Netralkan penempatan kolom yang ditulis INLINE di JSX
+     (gridColumn: 'span 2' dan '1/-1').
+
+     Di layar lebar itu benar: "Nama Lengkap" memang diberi dua kolom
+     pertama. Tapi di ponsel grid-nya sudah dikecilkan jadi
+     satu kolom, dan "span 2" MEMAKSA browser membuat kolom implisit
+     kedua yang lebarnya auto. Grid satu kolom berubah menjadi
+     "103.2px 202.4px" — dua kolom tidak simetris — lalu semua
+     kerusakan berantai dari sana:
+       - "Alamat" (1/-1) terjepit jadi 103px, textarea-nya berpecah
+         jadi tiga baris sempit
+       - "Dokter Penanggung Jawab" ikut 103px, teksnya terpotong
+       - kolom di sebelahnya melebar, jadi tidak ada yang rata
+
+     !important dipakai dengan sengaja. Gaya inline mengalahkan CSS
+     biasa, jadi satu-satunya cara menetalkannya dari stylesheet
+     adalah !important. Alternatifnya menukar keempat gaya inline itu
+     menjadi kelas, tetapi aturan yang sama akan muncul lagi di
+     formulir berikutnya — dan satu yang terlupa akan merusak tampilan
+     formulir itu secara diam-diam tanpa error. Satu aturan di sini
+     menutup semua formulir, sekarang maupun nanti. */
+  .form-row > * { grid-column: auto !important; }
   .winner-table td.scale-item { width: auto; }
   .table-responsive { overflow-x: auto; }
 }
