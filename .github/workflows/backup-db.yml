@@ -1,0 +1,140 @@
+name: Cadangan Basis Data
+
+# ============================================================
+#  Cadangan pg_dump terjadwal + pemulihan titik-waktu
+#  ----------------------------------------------------------
+#  Bedakan dengan "Cadangan" di dalam aplikasi, karena keduanya
+#  menjawab pertanyaan yang berbeda:
+#
+#    - Cadangan di aplikasi (.zip): memindahkan data ke komputer
+#      lain, ke klinik lain, atau ke arsip. Formatnya yang bisa
+#      dibaca manusia dan dipulihkan lewat antarmuka.
+#
+#    - Workflow ini: menyelamatkan data ketika APLIKASI tidak bisa
+#      dipakai lagi — deployed rusak, database rusak, atau ada
+#      yang menghapus data lewat SQL. Tidak ada layar yang bisa
+#      menyodorkan tombol "Unduh" kalau servernya sudah mati.
+#
+#  Prinsip: berkasnya berisi data kesehatan pasien, jadi DIENKRIPSI
+#  SEBELUM meninggalkan runner. Rahasia tidak pernah ditulis ke log.
+# ============================================================
+
+on:
+  schedule:
+    # 02.17 WIB. Menit 17 dipilih supaya tidak bertabrakan dengan
+    # cron lain yang biasanya jatuh di menit 0, ketika semua workflow
+    # repository GitHub menumpuk di detik yang sama.
+    - cron: '17 19 * * *'
+  workflow_dispatch:
+    inputs:
+      label:
+        description: 'Catatan untuk cadangan manual ini'
+        required: false
+        default: 'manual'
+
+concurrency:
+  # Jangan pernah dua pencadangan berjalan bersamaan — keduanya
+  # membaca database dan menulis nama berkas yang bisa sama.
+  group: backup-db
+  cancel-in-progress: false
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Siapkan kredensial
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_BACKUP }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "::error::Secret DATABASE_URL_BACKUP belum diisi di Settings > Secrets."
+            exit 1
+          fi
+          if [ -z "${BACKUP_PASSPHRASE:-}" ]; then
+            echo "::error::Secret BACKUP_PASSPHRASE belum diisi di Settings > Secrets."
+            exit 1
+          fi
+          # Jangan pernah mencetak URL-nya — isinya password.
+          echo "Kredensial tersedia (nilai tidak ditampilkan)."
+
+      - name: Cek pg_dump
+        run: |
+          set -euo pipefail
+          if ! command -v pg_dump >/dev/null 2>&1; then
+            echo "::error::pg_dump tidak ada di runner ini."
+            exit 1
+          fi
+          pg_dump --version
+
+      - name: Ambil cadangan
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_BACKUP }}
+          LABEL: ${{ github.event.inputs.label }}
+        run: |
+          set -euo pipefail
+          mkdir -p semenit
+          stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+          nama="woundcare-${stamp}"
+          echo "Membuat dump ${nama}.dump ..."
+
+          # Format custom memberi kompresi bawaan dan dump per
+          # tabel, jadi memulihkan satu tabel saja tidak perlu
+          # berkas utuh. Versi pg_dump yang terlalu lama ditolak
+          # karena formatnya tidak cocok dengan server.
+          if ! pg_dump \
+                --dbname="$DATABASE_URL" \
+                --format=custom \
+                --compress=6 \
+                --no-owner \
+                --no-privileges \
+                --file="semenit/${nama}.dump"; then
+            echo "::error::pg_dump gagal. Periksa DATABASE_URL_BACKUP — port 6543 (transaction pooler) sering tidak cocok untuk pg_dump; pakai 5432."
+            exit 1
+          fi
+
+          # Checksum dihitung SEBELUM enkripsi, supaya berkas yang
+          # korup terdeteksi sekarang, bukan baru saat pemulihan.
+          sha256sum "semenit/${nama}.dump" > "semenit/${nama}.sha256"
+          echo "Ukuran: $(du -h "semenit/${nama}.dump" | cut -f1)"
+          cat "semenit/${nama}.sha256"
+
+      - name: Enkripsi
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          # openssl sudah ada di runner, jadi tidak ada unduhan
+          # yang bisa gagal di tengah jalan.
+          for f in semenit/*.dump semenit/*.sha256; do
+            openssl enc -aes-256-cbc -pbkdf2 -iter 600000 \
+              -in "$f" -out "${f}.enc" \
+              -pass env:BACKUP_PASSPHRASE
+            rm -f "$f"
+          done
+          ls -lh semenit/
+
+      - name: Unggah sebagai artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: woundcare-db-${{ github.run_number }}
+          path: semenit/
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Ringkasan
+        run: |
+          {
+            echo "### Cadangan selesai"
+            echo ""
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Artifact: \`woundcare-db-${{ github.run_number }}\`"
+            echo "- Retensi artifact: 90 hari"
+            echo ""
+            echo "Berkas terenkripsi. Untuk memulihkan, lihat docs/PEMULIHAN.md."
+          } >> "$GITHUB_STEP_SUMMARY"
