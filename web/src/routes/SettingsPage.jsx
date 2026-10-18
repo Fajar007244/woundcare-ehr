@@ -691,9 +691,148 @@ function exportCSV() {
   UI.toast('CSV diunduh', 'ok');
 }
 
+/* ==========================================================
+   PEMULIHAN — validasi dan konfirmasi berlapis
+   ----------------------------------------------------------
+   Versi lama memakai SATU dialog confirm untuk DUA pilihan:
+   OK = gabung, Batal = GANTI TOTAL.
+
+   Itu bukan soal gaya, itu lubang data. UI.confirm() me-resolve
+   false untuk APAPUN yang menutup dialog tanpa menekan tombol:
+   Escape, klik di luar, tanda silang. Dan `false` berarti "ganti
+   total". Jadi siapa pun yang memilih berkas lalu pencet Escape —
+   gerakan paling wajar di dunia — menghapus seluruh database,
+   tanpa konfirmasi kedua dan tanpa jalan kembali.
+
+   Di bawah ini pemulihannya berjenjang:
+     1. baca + validasi berkas di peramban — gagal cepat, dan paling
+        penting: SEBELUM ada satu baris pun yang dihapus
+     2. tampilkan apa yang sebenarnya ada di dalam berkas
+     3. "Ganti Total" dipisah, dan mewajibkan mengetik GANTI SEMUA
+     4. unduh cadangan data SEKARANG secara otomatis, sebelum
+        pemulihan dijalankan — jadi selalu ada jalan kembali
+   ========================================================== */
+
+const KATA_GANTI = 'GANTI SEMUA';
+
+/** Baca dan periksa berkas cadangan. Melempar Error bila ditolak. */
+function telaahBerkas(nama, teks) {
+  let snap;
+  try { snap = JSON.parse(teks); }
+  catch (e) { throw new Error('Berkas bukan JSON yang valid.'); }
+
+  if (!snap || typeof snap !== 'object' || !Array.isArray(snap.patients)) {
+    throw new Error('Struktur berkas tidak dikenali — ini bukan cadangan WoundCare.');
+  }
+
+  /* Tanpa cek ini, berkas terpotong atau salah pilih tetap lolos:
+     yangshape-nya "patients" sudah benar. Padahal kalau mode-nya
+     replace, database sudah dikosongkan duluan lalu nol baris
+     mengisinya. */
+  const tanpaId = snap.patients.filter(p => !p || typeof p !== 'object' || !p.id).length;
+  if (tanpaId) {
+    throw new Error(`${tanpaId} catatan pasien tidak punya id. Berkas ditolak, data lama tidak disentuh.`);
+  }
+
+  let kunjungan = 0, consent = 0, foto = 0;
+  for (const p of snap.patients) {
+    kunjungan += (p.visits || []).length;
+    consent += (p.consents || []).length;
+    for (const v of (p.visits || [])) {
+      const ps = v.photos || {};
+      if (ps.before) foto++;
+      if (ps.after) foto++;
+    }
+  }
+  return { snap, nama, jumlah: { pasien: snap.patients.length, kunjungan, consent, foto } };
+}
+
+/** Dialog pilihan tiga arah. Menutup dialog apa pun berarti BATAL,
+    bukan "ganti total" — itu inti perbaikannya. */
+function dialogPilihan(telaah, tabrakan) {
+  return new Promise(resolve => {
+    let done = false;
+    const tutup = v => { done = true; m.close(); resolve(v); };
+
+    const baris = (k, v, catatan) =>
+      `<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid var(--c-border)">
+         <span style="color:var(--c-text-muted)">${k}</span>
+         <span style="font-family:var(--font-mono)"><b>${v}</b>${catatan ? ` <span style="color:var(--c-text-muted);font-family:inherit">${catatan}</span>` : ''}</span>
+       </div>`;
+
+    const j = telaah.jumlah;
+    const m = UI.modal({
+      title: 'Pulihkan Cadangan',
+      body: UI.el('div', {
+        html: `
+          <p style="margin:0 0 10px;font-size:13px">
+            Berkas <b style="font-family:var(--font-mono)">${UI.esc(telaah.nama)}</b> berisi:
+          </p>
+          ${baris('Pasien', j.pasien)}
+          ${baris('Kunjungan', j.kunjungan)}
+          ${baris('Persetujuan', j.consent)}
+          ${baris('Foto', j.foto)}
+          <div class="callout callout--warn" style="margin-top:12px;font-size:12.5px">
+            ${tabrakan > 0
+              ? `GABUNG akan menimpa <b>${tabrakan}</b> pasien yang punya id sama — termasuk yang isinya lebih baru.`
+              : 'Tidak ada id yang sama dengan data sekarang, jadi GABUNG hanya menambah.'}
+          </div>
+          <p style="margin:10px 0 0;font-size:12.5px;color:var(--c-text-muted)">
+            GANTI TOTAL menghapus seluruh pasien, kunjungan, foto, dan jejak audit yang ada sekarang.
+          </p>`
+      }),
+      footer: [
+        UI.el('button', { class: 'btn', text: 'Batal', onclick: () => tutup(null) }),
+        UI.el('button', { class: 'btn btn--danger', text: 'Ganti Total…', onclick: () => tutup('replace') }),
+        UI.el('button', { class: 'btn btn--primary', text: 'Gabungkan', onclick: () => tutup('merge') })
+      ],
+      onClose: () => { if (!done) resolve(null); }
+    });
+  });
+}
+
+/** Konfirmasi ketik. Satu-satunya jalan ke "hapus semua". */
+function dialogKetikGanti() {
+  return new Promise(resolve => {
+    let done = false;
+    const tutup = v => { done = true; m.close(); resolve(v); };
+
+    const input = UI.el('input', {
+      type: 'text', placeholder: KATA_GANTI, autocomplete: 'off', spellcheck: 'false',
+      style: 'font-family:var(--font-mono);text-transform:uppercase'
+    });
+    const ok = UI.el('button', { class: 'btn btn--danger', text: 'Hapus Semua & Pulihkan', onclick: () => tutup(true) });
+    ok.disabled = true;
+
+    input.addEventListener('input', () => {
+      ok.disabled = input.value.trim().toUpperCase() !== KATA_GANTI;
+    });
+
+    const m = UI.modal({
+      title: 'Hapus Seluruh Data?',
+      body: UI.el('div', {
+        html: `<p style="margin:0 0 10px;font-size:13px">
+                 Semua pasien, kunjungan, foto, dan riwayat perubahan <b>akan dih permanen</b>.
+                 Sebaiknya unduh cadangan dulu.
+               </p>`
+      }, [
+        UI.el('p', { text: 'Ketik ' + KATA_GANTI + ' untuk melanjutkan:', style: 'margin:0 0 6px;font-size:12.5px;color:var(--c-text-muted)' }),
+        input
+      ]),
+      footer: [
+        UI.el('button', { class: 'btn', text: 'Batal', onclick: () => tutup(false) }),
+        ok
+      ],
+      onClose: () => { if (!done) resolve(false); }
+    });
+    setTimeout(() => input.focus(), 60);
+  });
+}
+
 function KartuCadangan({ patients, onSelesai }) {
   const [ukuranDb, setUkuranDb] = useState(null);
   const [mengunduh, setMengunduh] = useState(false);
+  const [memulihkan, setMemulihkan] = useState(false);
 
   /* Ukuran diambil dari server: perhitungan di sisi klien tidak lagi
      akurat, karena foto sudah disimpan sebagai BLOB terpisah dan tidak
@@ -702,16 +841,23 @@ function KartuCadangan({ patients, onSelesai }) {
     API.stats().then(s => setUkuranDb(s.fotoBytes || 0)).catch(() => {});
   }, []);
 
-  /* Cadangan diambil dari server (GET /api/export), bukan dari state:
-     server menyertakan foto sebagai base64 supaya berkas cadangan mandiri
-     dan bisa memulihkan di komputer lain. */
+  /* Unduh keadaan SEKARANG juga, bukan hanya berkas yang diimpor.
+     Dipakai baik untuk tombol Unduh, maupun otomatis tepat sebelum
+     pemulihan — supaya selalu ada jalan kembali. */
+  async function unduhSekarang(akhiran) {
+    const res = await fetch('/api/export', { credentials: 'same-origin' });
+    if (!res.ok) throw new Error('Gagal mengambil cadangan dari server.');
+    const teks = await res.text();
+    const jam = new Date().toTimeString().slice(0, 8).replace(/:/g, '');
+    const nama = `woundcare-${akhiran}-${Store.today()}-${jam}.json`;
+    UI.download(nama, teks, 'application/json');
+    return nama;
+  }
+
   async function ekspor() {
     setMengunduh(true);
     try {
-      const res = await fetch('/api/export', { credentials: 'same-origin' });
-      if (!res.ok) throw new Error('Gagal mengambil cadangan dari server.');
-      const teks = await res.text();
-      UI.download(`woundcare-cadangan-${Store.today()}.json`, teks, 'application/json');
+      await unduhSekarang('cadangan');
       UI.toast('Cadangan diunduh', 'ok');
     } catch (e) {
       UI.toast(e.message, 'danger');
@@ -723,16 +869,48 @@ function KartuCadangan({ patients, onSelesai }) {
   async function impor() {
     const f = await UI.pickFile();
     if (!f) return;
-    const okMerge = await UI.confirm(
-      'Pilih cara pemulihan:\n\nOK = GABUNG dengan data yang ada (data dengan ID sama akan ditimpa)\nBatal = GANTI TOTAL (data saat ini dihapus)',
-      { title: 'Pulihkan Cadangan', okText: 'Gabung', danger: false }
-    );
+
+    setMemulihkan(true);
     try {
-      const res = Store.importJSON(f.text, { merge: !!okMerge });
+      /* 1 — validasi lokal, sebelum apa pun berubah di server */
+      const telaah = telaahBerkas(f.name, f.text);
+
+      /* 2 — berapa id yang akan ditimpa */
+      const idSekarang = new Set(patients.map(p => p.id));
+      const tabrakan = telaah.snap.patients.filter(p => idSekarang.has(p.id)).length;
+
+      /* 3 — pilihan. Null = batal, dan batal selalu aman. */
+      const mode = await dialogPilihan(telaah, tabrakan);
+      if (!mode) return;
+
+      /* 4 — untuk ganti total, wajib mengetik ulang */
+      if (mode === 'replace') {
+        const yakin = await dialogKetikGanti();
+        if (!yakin) return;
+      }
+
+      /* 5 — cadangan otomatis dari kondisi SEKARANG, sebelum menulis.
+         Ini yang membuat pemulihan bisa dibatalkan: bila hasilnya
+         tidak sesuai, berkas ini yang dikembalikan. */
+      try {
+        const namaCad = await unduhSekarang('pra-pulihkan');
+        UI.toast('Cadangan otomatis: ' + namaCad, 'ok', 4000);
+      } catch (e) {
+        const tetap = await UI.confirm(
+          'Gagal mengunduh cadangan otomatis.\n\nMelanjutkan tanpa cadangan berarti data sekarang tidak punya jalan kembali. Lanjutkan?',
+          { title: 'Cadangan otomatis gagal', okText: 'Tetap Lanjut', danger: true }
+        );
+        if (!tetap) return;
+      }
+
+      /* 6 — baru benar-benar menulis */
+      const res = Store.importJSON(telaah.snap, { merge: mode === 'merge' });
       UI.toast(`${res.imported} pasien dipulihkan`, 'ok');
       onSelesai();
     } catch (err) {
-      UI.toast(err.message, 'danger', 5000);
+      UI.toast(err.message, 'danger', 6000);
+    } finally {
+      setMemulihkan(false);
     }
   }
 
@@ -741,10 +919,10 @@ function KartuCadangan({ patients, onSelesai }) {
       <div className="card__head"><span className="num">iv</span><h2>Pencadangan &amp; Pemulihan Data</h2></div>
       <div className="card__body">
         <Callout tone="warn">
-          <strong>⚠ Data tersimpan di server klinik</strong>
-          Seluruh rekam medis, foto luka, dan jejak audit disimpan pada basis data
-          <b> SQLite</b> di server lokal. Menutup peramban tidak menghapus data.
-          Rutinlah mengunduh berkas cadangan bila server bisa terbawa rusak.
+          <strong>⚠ Data tersimpan di basis data server, bukan di peramban</strong>
+          Seluruh rekam medis, foto luka, dan jejak audit disimpan pada <b>PostgreSQL</b> di sisi server.
+          Menutup peramban tidak menghapus data. Unduhlah cadangan secara berkala — menghapus dari
+          peramban tidak mungkin, dan tidak ada di server yang bisa memulihkan data yang sudah hilang.
         </Callout>
 
         <p style={{ marginTop: 12, fontSize: 12.5, color: 'var(--c-text-muted)' }}>
@@ -753,8 +931,12 @@ function KartuCadangan({ patients, onSelesai }) {
         </p>
 
         <div className="btn-group" style={{ marginTop: 14 }}>
-          <button className="btn btn--primary" id="btn-export" onClick={ekspor}>⬇ Unduh Cadangan (JSON)</button>
-          <button className="btn" id="btn-import" onClick={impor}>⬆ Pulihkan dari Cadangan</button>
+          <button className="btn btn--primary" id="btn-export" onClick={ekspor} disabled={mengunduh}>
+            {mengunduh ? 'Menyiapkan…' : '⬇ Unduh Cadangan (JSON)'}
+          </button>
+          <button className="btn" id="btn-import" onClick={impor} disabled={memulihkan}>
+            {memulihkan ? 'Memulihkan…' : '⬆ Pulihkan dari Cadangan'}
+          </button>
           <button className="btn" id="btn-export-csv" onClick={exportCSV}>⬇ Ekspor Kunjungan (CSV)</button>
         </div>
       </div>

@@ -475,10 +475,23 @@ const Store = (() => {
   function exportJSON() { return JSON.stringify(state, null, 2); }
 
   function importJSON(json, { merge = false } = {}) {
-    let incoming;
-    try { incoming = JSON.parse(json); }
-    catch (e) { throw new Error('Berkas bukan JSON yang valid.'); }
+    let incoming = json;
+    /* Menerima teks JSON maupun objek yang sudah diurai. Halaman
+       Pengaturan mengurai dan memvalidasi berkasnya lebih dulu supaya
+       bisa memberi tahu isinya sebelum ada satu baris pun yang ditulis,
+       lalu meneruskan objeknya ke sini. */
+    if (typeof incoming === 'string') {
+      try { incoming = JSON.parse(incoming); }
+      catch (e) { throw new Error('Berkas bukan JSON yang valid.'); }
+    }
     if (!incoming || !Array.isArray(incoming.patients)) throw new Error('Struktur berkas tidak dikenali.');
+
+    /* Setiap pasien wajib punya id. Tanpa cek ini berkas terpotong atau
+       salah pilih tetap lolos karena bentuknya sudah cuma "patients" —
+       padahal mode replace mengosongkan database DULUAN, lalu tidak
+       mengisi apa pun. Hasilnya data hilang tanpa jalur kembali. */
+    const tanpaId = incoming.patients.filter(p => !p || typeof p !== 'object' || !p.id).length;
+    if (tanpaId) throw new Error(`${tanpaId} catatan pasien tidak punya id. Berkas ditolak, data lama tidak disentuh.`);
 
     incoming.patients.forEach(normalizePatient);
     const snap = { meta: { version: 1, clinic: (incoming.meta && incoming.meta.clinic) || state.meta.clinic }, patients: incoming.patients };

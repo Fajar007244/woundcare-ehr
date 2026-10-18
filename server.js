@@ -442,14 +442,56 @@ const routes = {
 
   /* --- Pulihkan cadangan / muat data contoh --- */
   'POST /api/bulk': async (req, res) => {
-    if (!await requireAdmin(req, res)) return;
+    const u = await requireAdmin(req, res); if (!u) return;
     const b = await readBody(req);
     const snap = b && b.snapshot;
-    if (!snap || !Array.isArray(snap.patients)) return json(res, 400, { error: 'Snapshot tidak lengkap.' });
+    if (!snap || !Array.isArray(snap.patients)) {
+      return json(res, 400, { error: 'Snapshot tidak lengkap.' });
+    }
+
+    /* Validasi ISI, bukan hanya bentuknya.
+     *
+     * Sebelumnya hanya diperiksa "!Array.isArray(snap.patients)". Berkas
+     * apa pun yang kebetulan punya kunci "patients" — termasuk berkas
+     * terpotong atau salah pilih — akan diterima. Dalam mode 'replace'
+     * itu berarti: DELETE FROM patients, visits, consents, photos,
+     * audit_log ... lalu nol baris diisi. Hasilnya basis data kosong,
+     * dan pesan success tetap berbunyi "0 pasien dipulihkan".
+     *
+     * Karena itu setiap entri wajib punya id sebelum apa pun dihapus.
+     */
+    const cacat = snap.patients.filter(p => !p || typeof p !== 'object' || !p.id).length;
+    if (cacat) {
+      return json(res, 400, {
+        error: `${cacat} catatan pasien tidak punya id. Pemulihan dibatalkan, data lama tidak disentuh.`
+      });
+    }
+    if (snap.patients.length === 0 && (b.mode || 'replace') !== 'replace') {
+      return json(res, 400, { error: 'Berkas tidak berisi pasien apa pun.' });
+    }
+
+    const mode = b.mode === 'merge' ? 'merge' : 'replace';
     try {
-      const n = await db.replaceAll(snap, b.mode === 'merge');
+      const sebelum = await db.stats();
+      const n = await db.replaceAll(snap, mode === 'merge');
       if (snap.meta && snap.meta.clinic) await db.saveClinicConfig(snap.meta.clinic, DEFAULT_CLINIC);
-      json(res, 200, { ok: true, patients: n });
+
+      /* Jejak audit untuk pemulihan.
+       *
+       * Tanpa baris ini, mode 'replace' menghapus seluruh access_log
+       * dan TIDAK meninggalkan catatan bahwa pemulihan itu terjadi.
+       * Untuk rekam medis itu lubang kepatuhan, bukan sekadar fitur
+       * yang kurang: tidak ada yang bisa membuktikan data diubah atau
+       * kapan. 'pulih' sudah ada di AKSI_VALID, tapi tidak pernah dipanggil
+       * dari jalur ini.
+       */
+      await db.recordAccess(u, clientIp(req), {
+        aksi: 'pulih',
+        detail: `${mode === 'merge' ? 'Gabung' : 'Ganti total'} — ${snap.patients.length} pasien dipulihkan, ` +
+                `total ${sebelum.patients} → ${n}`
+      });
+
+      json(res, 200, { ok: true, patients: n, mode });
     } catch (e) {
       console.error('[api] bulk', e);
       json(res, 500, { error: 'Gagal menyimpan snapshot.' });
