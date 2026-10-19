@@ -29,9 +29,13 @@
       app.js lama), TETAPI jejaknya tetap ditulis — hanya dalam bentuk
       ringkas yang terbaca manusia: "(kosong)" → "182 KB".
 
-   4. `capture="environment"` pada <input type="file"> wajib
-      dipertahankan; tanpa itu tombol "Unggah Foto" tidak langsung
-      membuka kamera belakang di HP.
+   4. Input berkas SENGAJA tanpa `capture`. Bila `capture="environment"`
+      dipasang, HP langsung membuka kamera belakang dan galeri tidak bisa
+      dipilih. Tanpa itu, menekan "Unggah Foto" memunculkan menu bawaan
+      sistem (Kamera / Galeri / Berkas), jadi kedua jalur tersedia.
+      Kompresi di Photos.compressAdaptive() menjaga ukurannya tetap kecil
+      (foto 12 MP terukur -> 178 KB), sehingga batas 3 MB di server tidak
+      pernah terlanggar.
    ========================================================== */
 
 import { useMemo, useRef, useState } from 'react';
@@ -98,14 +102,14 @@ function SlotFoto({ visit, slot, meta, beku, onUnggah, onHapus }) {
       </div>
 
       {/*
-       * capture="environment" → HP membuka kamera belakang langsung.
-       * Sengaja disembunyikan; tombol "Unggah Foto" yang memanggil .click()
-       * supaya experience desktop tetap memakai pemilih berkas.
+       * Sengaja TANPA `capture`: dengan capture, HP langsung membuka kamera
+       * belakang dan galeri tidak bisa dipilih. Tanpa itu, menekan
+       * "Unggah Foto" memunculkan menu bawaan sistem (Kamera / Galeri /
+       * Berkas). Input disembunyikan; tombol yang memanggil .click().
        */}
       <input
         type="file"
         accept="image/*"
-        capture="environment"
         id={`file-${key}`}
         ref={fileRef}
         className="hidden"

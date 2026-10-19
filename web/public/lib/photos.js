@@ -134,18 +134,45 @@ const Photos = (() => {
   }
 
   /* ---------- Target kompresi adaptif jika kuota mepet ---------- */
-  /** Panggil ulang dengan kualitas lebih rendah sampai muat. */
-  async function compressAdaptive(file, { budgetBytes = 300 * 1024 } = {}) {
+  /**
+   * Kompresi bertingkat: mulai dari kualitas terbaik, turunkan hanya bila
+   * hasilnya masih di atas `budgetBytes`.
+   *
+   * `hardMax` adalah jaring pengaman. Batas server 3 MB (readBinary di
+   * server.js) dan batas body Vercel 4,5 MB. Tangga di bawah sudah lebih
+   * dari cukup untuk foto ponsel — terukur 12,4 MB (12,2 MP) -> 178 KB —
+   * tetapi bila ada berkas yang tak terduga, ukurannya tetap dipaksa turun
+   * sampai di bawah hardMax supaya pengguna tidak pernah melihat penolakan
+   * "Foto terlalu besar (maksimal 3 MB)".
+   */
+  async function compressAdaptive(file, {
+    budgetBytes = 300 * 1024,
+    hardMax = 2.5 * 1024 * 1024
+  } = {}) {
     const ladder = [
       { maxEdge: 1000, quality: 0.72 },
       { maxEdge: 860,  quality: 0.62 },
       { maxEdge: 700,  quality: 0.55 },
       { maxEdge: 560,  quality: 0.48 }
     ];
-    let last;
-    for (const opt of ladder) {
+
+    /* Ukuran yang benar-benar dikirim adalah blob; data URL dipakai sebagai
+       cadangan bila peramban tidak menghasilkan blob. */
+    const ukuran = r => (r.blob ? r.blob.size : sizeOf(r.dataUrl));
+
+    let last, opt;
+    for (opt of ladder) {
       last = await compress(file, opt);
-      if (sizeOf(last.dataUrl) <= budgetBytes) break;
+      if (ukuran(last) <= budgetBytes) return last;
+    }
+
+    /* Jaring pengaman: turunkan terus sampai di bawah batas mutlak. */
+    let edge = opt.maxEdge;
+    let quality = opt.quality;
+    for (let i = 0; i < 6 && ukuran(last) > hardMax; i++) {
+      edge = Math.max(240, Math.round(edge * 0.75));
+      quality = Math.max(0.3, Number((quality - 0.08).toFixed(2)));
+      last = await compress(file, { maxEdge: edge, quality });
     }
     return last;
   }
