@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { useData } from '../core/data.jsx';
 import { Store, UI, Charts, PrintDoc } from '../lib/index.js';
 import { Badge } from '../components/ui.jsx';
+import { Icon } from '../components/icons.jsx';
 
 export default function PatientListPage() {
   const { patients } = useData();
@@ -33,10 +34,19 @@ export default function PatientListPage() {
 
   return (
     <main className="view" id="view-list">
-      <div className="page-head">
-        <div className="page-head__text">
-          <h1>Daftar Pasien</h1>
-          <p className="page-head__sub">Kelola data pasien, dokumentasi luka, dan monitor perkembangan perawatan.</p>
+      {/*
+       * Varian `--hero` HANYA dipakai halaman ini. Pengaturan dan Tambah
+       * Pasien memakai .page-head polos yang sama seperti sebelumnya.
+       * Ikon + teks dibungkus .page-head__lead supaya keduanya membungkus
+       * sebagai satu kesatuan di layar sempit, tidak terpisah baris.
+       */}
+      <div className="page-head page-head--hero">
+        <div className="page-head__lead">
+          <span className="page-head__icon"><Icon name="user" size={22} /></span>
+          <div className="page-head__text">
+            <h1>Daftar Pasien</h1>
+            <p className="page-head__sub">Kelola data pasien, dokumentasi luka, dan monitor perkembangan perawatan.</p>
+          </div>
         </div>
         <div className="page-head__actions">
           <button className="btn" onClick={cetakDaftar} title="Cetak seluruh daftar pasien aktif">Cetak Daftar Pasien</button>

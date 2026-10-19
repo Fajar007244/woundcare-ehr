@@ -169,6 +169,45 @@ a { color: var(--c-primary); }
 .page-head__sub { color: var(--c-text-muted); font-size: 13px; margin: 2px 0 0; }
 .page-head__actions { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
 
+/* Varian hero — HANYA halaman Daftar Pasien.
+   Halaman lain tetap memakai .page-head polos. Jadi satu kelas dasar,
+   satu varian; tidak ada halaman lain yang ikut berubah. */
+.page-head--hero {
+  position: relative;
+  align-items: center;
+  padding: var(--sp-4) var(--sp-5);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg);
+  background: linear-gradient(180deg, #fff 0%, var(--c-surface-2) 100%);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+/* Garis aksen di tepi kiri, memakai warna utama aplikasi. */
+.page-head--hero::before {
+  content: "";
+  position: absolute;
+  top: 0; bottom: 0; left: 0;
+  width: 4px;
+  background: linear-gradient(180deg, var(--c-primary), var(--c-accent));
+}
+.page-head__lead {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex: 1 1 320px;
+  min-width: 0;
+}
+.page-head__icon {
+  flex: 0 0 44px;
+  width: 44px; height: 44px;
+  display: grid; place-items: center;
+  border-radius: 12px;
+  border: 1px solid #99f6e4;
+  background: linear-gradient(140deg, var(--c-primary-soft), #e0f2fe);
+  color: var(--c-primary-dark);
+}
+.page-head--hero h1 { font-size: 24px; line-height: 1.2; }
+
 .card {
   background: var(--c-surface);
   border: 1px solid var(--c-border);
@@ -1378,6 +1417,13 @@ tr.is-changed::after { inset: 0; }
   .form-row > * { grid-column: auto !important; }
   .winner-table td.scale-item { width: auto; }
   .table-responsive { overflow-x: auto; }
+
+  /* Hero Daftar Pasien di layar sempit: rapatkan bantalan dari 24px ke
+     16px supaya isi tidak terjepit setelah bantalan .view sendiri 12px,
+     kecilkan judul, dan rata-atas agar ikon sejajar baris pertama teks. */
+  .page-head--hero { padding: var(--sp-4); align-items: flex-start; }
+  .page-head--hero h1 { font-size: 21px; }
+  .page-head__icon { flex: 0 0 40px; width: 40px; height: 40px; border-radius: 10px; }
 }
 
 /* ==========================================================
