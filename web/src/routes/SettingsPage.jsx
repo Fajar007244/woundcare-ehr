@@ -45,6 +45,7 @@ import { useNavigate } from 'react-router-dom';
 import { useData } from '../core/data.jsx';
 import { Store, UI, API, Photos, Scales } from '../lib/index.js';
 import { Badge, Callout } from '../components/ui.jsx';
+import { Icon } from '../components/icons.jsx';
 
 /* ==========================================================
    Paginasi — salinan persis app.js lama (baris 80-135)
@@ -1171,10 +1172,16 @@ export default function SettingsPage() {
 
   return (
     <main className="view" id="view-settings">
-      <div className="page-head">
-        <div className="page-head__text">
-          <h1>Pengaturan &amp; Data</h1>
-          <p className="page-head__sub">Identitas klinik, pencadangan, dan pengelolaan basis data lokal.</p>
+      {/* Varian hero, sama seperti halaman Daftar Pasien. Blok
+          "Akses ditolak" di atas sengaja TETAP memakai .page-head polos:
+          itu pesan peringatan, bukan kepala halaman. */}
+      <div className="page-head page-head--hero">
+        <div className="page-head__lead">
+          <span className="page-head__icon"><Icon name="database" size={22} /></span>
+          <div className="page-head__text">
+            <h1>Pengaturan &amp; Data</h1>
+            <p className="page-head__sub">Identitas klinik, pencadangan, dan pengelolaan basis data lokal.</p>
+          </div>
         </div>
         <div className="page-head__actions">
           <button className="btn" onClick={() => nav('/')}>← Kembali</button>
