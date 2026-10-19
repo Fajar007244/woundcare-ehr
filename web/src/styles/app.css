@@ -274,37 +274,139 @@ a { color: var(--c-primary); }
 .patient-bar__actions { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
 
 /* ---------------------------------------------------------
-   Tabs
-   --------------------------------------------------------- */
+   Tabs — "bilah langkah"
+   ---------------------------------------------------------
+   Keenam tab ini adalah URUTAN LANGKAH pengisian rekam medis, bukan
+   deretan menu biasa. Karena itu tiap tab memakai chip nomor 22px yang
+   meniru .card__head .num — penanda langkah yang sudah dipakai di
+   seluruh aplikasi — dan chip itu berubah menjadi centang hijau begitu
+   langkahnya benar-benar terisi. Sumber centangnya ada di App.jsx.
+
+   Catatan perubahan dari versi lama:
+     • dulu hanya teks polos tanpa wadah, dengan garis bawah 2px;
+     • ikon disembunyikan di layar lebar padahal di ponsel sudah dipakai
+       sejak awal — sekarang keduanya memakai ikon yang sama;
+     • dulu tab aktif memakai DUA penanda sekaligus (garis bawah 3px DAN
+       blok latar --c-primary-soft), dan :hover memberi blok latar yang
+       sama sehingga hover nyaris tak bisa dibedakan dari aktif.
+   Aturan ponsel ada di @media max-width: 860px dan sengaja menimpa
+   hampir semua properti di bawah ini. */
 
 .tabs {
   display: flex;
-  gap: var(--sp-1);
-  border-bottom: 2px solid var(--c-border);
+  gap: 6px;
+  padding: 6px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
   margin-bottom: var(--sp-4);
   overflow-x: auto;
+  scrollbar-width: thin;
 }
 .tab {
   appearance: none;
-  border: 0;
+  flex: 1 1 0;
+  min-width: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
   background: transparent;
   font: inherit;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
   color: var(--c-text-muted);
-  padding: var(--sp-3) var(--sp-4);
   cursor: pointer;
-  border-bottom: 3px solid transparent;
-  margin-bottom: -2px;
   white-space: nowrap;
-  border-radius: var(--r-sm) var(--r-sm) 0 0;
-  transition: color .12s, background .12s;
+  transition: color .14s, background .14s, border-color .14s;
 }
-.tab:hover { color: var(--c-primary-dark); background: var(--c-primary-soft); }
-.tab.is-active {
+/* Hover sengaja dibuat LEBIH RINGAN daripada aktif, supaya keduanya
+   tidak lagi tampak sama seperti versi lama. */
+.tab:hover {
   color: var(--c-primary-dark);
-  border-bottom-color: var(--c-primary);
-  background: var(--c-primary-soft);
+  background: var(--c-surface-2);
+  border-color: var(--c-border);
+}
+.tab.is-active {
+  color: #fff;
+  background: linear-gradient(160deg, var(--c-primary), var(--c-primary-dark));
+  border-color: transparent;
+  box-shadow: 0 2px 8px rgba(15, 118, 110, .28);
+}
+
+/* Chip nomor. Ukuran dan radiusnya mengikuti .card__head .num supaya
+   kedua penanda langkah di halaman ini terbaca sekeluarga. */
+.tab__num {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  border: 1px solid var(--c-border);
+  background: var(--c-surface-2);
+  color: var(--c-text-muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  transition: background .14s, border-color .14s, color .14s;
+}
+
+/* Langkah sudah terisi — chip menjadi centang hijau. */
+.tab__num.is-done {
+  background: var(--c-ok-soft);
+  border-color: #86efac;
+  color: var(--c-ok);
+}
+/* Di atas pil teal gelap centang hijau tenggelam, jadi chip-nya dibalik
+   lebih dulu menjadi putih penuh. Berlaku juga untuk langkah yang
+   sedang dibuka DAN sudah terisi. */
+.tab.is-active .tab__num {
+  background: rgba(255, 255, 255, .18);
+  border-color: rgba(255, 255, 255, .34);
+  color: #fff;
+}
+.tab.is-active .tab__num.is-done {
+  background: #fff;
+  border-color: #fff;
+  color: var(--c-ok);
+}
+
+.tab__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tab__ico { flex: 0 0 auto; display: block; }
+/* Label pendek hanya untuk bottom navigation di ponsel. */
+.tab__short { display: none; }
+
+/* ---------------------------------------------------------
+   Penyelamat ruang di layar lebar — DIUKUR, bukan dikira-kira.
+   ---------------------------------------------------------
+   Pada 1280px ke atas keenam label utuh (segmen 198px). Menyusut ke
+   bawah: 185px pada 1200, 168px pada 1100, 155px pada 1024 — dan
+   "Informed Consent" mulai terpotong sejak 1200px.
+
+   Untungnya bilah ini TIDAK PERNAH memunculkan gulir mendatar: segmen
+   sama-lebar ditambah ellipsis membuat labelnya memendek, bukan meluber.
+
+   Yang dilepas lebih dulu adalah IKON (27px per segmen), BUKAN chip
+   nomor — nomor itulah yang membuat bilah ini terbaca sebagai urutan
+   langkah. Jumlah label terpotong dari 6:
+
+                1024  1100  1200  1280+
+     penuh        3     2     1     0
+     tanpa ikon   1     0     0     0
+     +rapat       0     0     0     0
+
+   Kedua aturan ini juga mengenai ponsel, tapi blok ponsel di bawah
+   menang karena letaknya lebih belakang. */
+@media (max-width: 1279px) {
+  .tab__ico { display: none; }
+}
+@media (max-width: 1099px) {
+  .tab { padding: 10px 8px; font-size: 12px; }
 }
 
 /* Kotak cari milik halaman Daftar Pasien, untuk SEMUA perangkat.
@@ -314,11 +416,9 @@ a { color: var(--c-primary); }
 .search-inline { display: block; margin-bottom: var(--sp-4); }
 .search-inline input { width: 100%; min-height: 44px; }
 
-/* Ikon & label pendek HANYA untuk bottom navigation di ponsel.
-   Disembunyikan di sini, dan hanya ditampilkan kembali di dalam
-   @media max-width: 860px. Efeknya: tampilan layar lebar tidak
-   berubah satu piksel pun dari versi sebelumnya. */
-.tab__ico, .tab__short { display: none; }
+/* Catatan: dulu di sini ada `.tab__ico, .tab__short { display: none; }`.
+   Aturan itu dihapus — .tab__ico kini tampil juga di layar lebar (lihat
+   blok Tabs di atas), dan .tab__short sudah disembunyikan di sana. */
 
 /* ---------------------------------------------------------
    Forms
@@ -1618,14 +1718,28 @@ tr.is-changed::after { inset: 0; }
     grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 0;
     margin-bottom: 0;
-    border-bottom: 0;
+    /* Bilah bawah harus menempel penuh ke tepi layar. Tiga baris di
+       bawah menetralkan wadah kartu versi layar lebar — padding 6px,
+       garis tepi, dan sudut 14px — yang kalau tidak dibatalkan membuat
+       bilah ini tertanam 6px dari tepi kiri/kanan dan bersudut bulat.
+       padding-bottom tetap menghormati safe-area iPhone. */
+    padding: 0 0 env(safe-area-inset-bottom);
+    border: 0;
     border-top: 1px solid var(--c-border);
+    border-radius: 0;
     background: var(--c-surface);
     box-shadow: 0 -2px 10px rgba(15, 23, 32, .10);
     overflow: visible;
-    padding-bottom: env(safe-area-inset-bottom);
   }
   .tab {
+    /* display:block mempertahankan tata letak lama apa adanya: ikon dan
+       label tersusun sebagai blok di dalam tombol, bukan sebagai flexbox.
+       Tanpa baris ini bilah bawah mewarisi display:flex milik versi layar
+       lebar, dan flex-direction:column di bawahnya — yang dulu tidak
+       berpengaruh sama sekali — mendadak ikut bekerja sehingga tata
+       letaknya bergeser. */
+    display: block;
+    flex: none;
     flex-direction: column;
     align-items: center;
     justify-content: center;
@@ -1634,7 +1748,7 @@ tr.is-changed::after { inset: 0; }
     height: 58px;
     padding: 4px 2px;
     margin-bottom: 0;
-    border-bottom: 0;
+    border: 0;
     border-radius: 0;
     background: transparent;
     font-size: 10px;
@@ -1659,6 +1773,9 @@ tr.is-changed::after { inset: 0; }
   .tab__ico { display: block; margin: 0 auto; }
   .tab__label { display: none; }
   .tab__short { display: block; }
+  /* Chip nomor tidak dipakai di bilah bawah: ruangnya sempit dan
+     ikon + label pendek sudah cukup menjelaskan setiap langkah. */
+  .tab__num { display: none; }
 
   /* Ruang supaya isi tidak tertutup bilah bawah. */
   #view-patient {

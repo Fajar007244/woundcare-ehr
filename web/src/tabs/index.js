@@ -27,13 +27,21 @@ import GrafikTab from './GrafikTab.jsx';
    `icon` & `short` hanya dipakai oleh bottom navigation di ponsel.
    Di layar lebar keduanya disembunyikan lewat CSS, sehingga tampilan
    desktop tetap persis seperti semula. */
+/* `num` dipisah dari `label` supaya nomor langkah bisa dirender sebagai
+   chip tersendiri (lihat .tab__num di app.css). Sebelumnya nomornya
+   menempel di dalam teks label sebagai "1. Data Pasien", sehingga tidak
+   bisa digayakan terpisah maupun ditukar menjadi centang.
+
+   `label` tetap sama kata demi kata dengan TABS di assets/js/app.js;
+   yang hilang hanya awalan nomornya.
+   `short` hanya dipakai bottom navigation di ponsel. */
 export const TAB_LIST = [
-  { key: 'identitas',  label: '1. Data Pasien',      icon: 'user',       short: 'Pasien' },
-  { key: 'consent',    label: '2. Informed Consent', icon: 'fileText',    short: 'Consent' },
-  { key: 'pengkajian', label: '3. Pengkajian Luka',  icon: 'activity',   short: 'Luka' },
-  { key: 'foto',       label: '4. Foto Luka',        icon: 'camera',     short: 'Foto' },
-  { key: 'winner',     label: '5. WINNER Scale',     icon: 'barChart',   short: 'Skor' },
-  { key: 'grafik',     label: '6. Grafik Tren',      icon: 'trendingUp', short: 'Grafik' }
+  { key: 'identitas',  num: 1, label: 'Data Pasien',      icon: 'user',       short: 'Pasien' },
+  { key: 'consent',    num: 2, label: 'Informed Consent', icon: 'fileText',    short: 'Consent' },
+  { key: 'pengkajian', num: 3, label: 'Pengkajian Luka',  icon: 'activity',   short: 'Luka' },
+  { key: 'foto',       num: 4, label: 'Foto Luka',        icon: 'camera',     short: 'Foto' },
+  { key: 'winner',     num: 5, label: 'WINNER Scale',     icon: 'barChart',   short: 'Skor' },
+  { key: 'grafik',     num: 6, label: 'Grafik Tren',      icon: 'trendingUp', short: 'Grafik' }
 ];
 
 export const TABS = {

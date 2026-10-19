@@ -333,6 +333,51 @@ function PatientPage() {
 
   const Komponen = TABS[tab] || TABS.identitas;
 
+  /* ==================================================================
+     Status "terisi" tiap langkah — sumber centang di bilah tab.
+     ==================================================================
+     Setiap centang HARUS berasal dari data yang benar-benar tersimpan.
+     Aplikasi ini tidak punya konsep "lengkap" — satu-satunya kolom yang
+     bertanda wajib adalah Nama Lengkap — jadi syarat di bawah adalah
+     pilihan bersama dan sengaja dibuat konservatif: lebih baik sebuah
+     langkah TIDAK menyala padahal isinya sebenarnya cukup, daripada
+     menyala padahal isinya belum lengkap. Centang palsu di berkas rekam
+     medis bukan cacat tampilan, tapi keterangan yang menyesatkan.
+
+     Langkah 3, 4, 5 mengikuti KUNJUNGAN AKTIF — ketiganya memang mengedit
+     kunjungan. Langkah 1, 2, 6 milik pasien dan tidak berpindah saat
+     kunjungan diganti. */
+  const langkahTerisi = (() => {
+    const id = patient.identity || {};
+    const isi = x => String(x == null ? '' : x).trim() !== '';
+    const uk = (visit && visit.wound && visit.wound.ukuran) || {};
+
+    return {
+      /* 1. Data Pasien — inti identitas terisi. Tanggal lahir ikut karena
+         umur dipakai di banyak tempat: bar pasien, cetak, dan grafik. */
+      identitas: isi(id.nama) && isi(id.jenisKelamin) && isi(id.tglLahir)
+                 && isi(id.alamat) && isi(id.telepon),
+
+      /* 2. Informed Consent — ada satu catatan persetujuan. Tanda tangan
+         TIDAK disyaratkan: aplikasi sendiri menampilkan "(kertas)" untuk
+         yang ditandatangani di atas kertas, dan itu sah. */
+      consent: (patient.consents || []).length > 0,
+
+      /* 3. Pengkajian Luka — luka sudah disebut lokasinya dan diukur. */
+      pengkajian: !!(visit && isi(visit.wound && visit.wound.lokasi)
+                     && isi(uk.panjang) && isi(uk.lebar)),
+
+      /* 4. Foto Luka — sekurangnya satu slot foto terisi. */
+      foto: !!(visit && visit.photos && (visit.photos.before || visit.photos.after)),
+
+      /* 5. WINNER Scale — skor kunjungan ini sudah dihitung. */
+      winner: !!(visit && visit.winner && visit.winner.total != null),
+
+      /* 6. Grafik Tren — butuh dua titik atau lebih untuk bisa digambar. */
+      grafik: Store.summarize(patient).scored.length >= 2
+    };
+  })();
+
   /* Susunan ini harus sama dengan index.html versi lama (baris 82-89):
    *
    *   <main id="view-patient" class="view">
@@ -374,18 +419,30 @@ function PatientPage() {
           pendek Yang muncul di sana, sedangkan .tab__label (label
           lengkap) disembunyikan CSS. Di layar lebar sebaliknya. */}
       <div id="tab-strip" className="tabs">
-        {TAB_LIST.map(t => (
-          <button
-            key={t.key}
-            className={`tab${tab === t.key ? ' is-active' : ''}`}
-            onClick={() => setTab(t.key)}
-            aria-current={tab === t.key ? 'page' : undefined}
-          >
-            <Icon name={t.icon} size={19} className="tab__ico" />
-            <span className="tab__label">{t.label}</span>
-            <span className="tab__short">{t.short}</span>
-          </button>
-        ))}
+        {TAB_LIST.map(t => {
+          const aktif = tab === t.key;
+          const terisi = langkahTerisi[t.key];
+          return (
+            <button
+              key={t.key}
+              className={`tab${aktif ? ' is-active' : ''}`}
+              onClick={() => setTab(t.key)}
+              aria-current={aktif ? 'page' : undefined}
+              title={`Langkah ${t.num}: ${terisi ? 'sudah terisi' : 'belum terisi'}`}
+            >
+              {/* Chip nomor berubah jadi centang begitu langkahnya terisi.
+                  aria-hidden karena keadaannya sudah terwakili oleh title
+                  tombol induknya — tanpa ini pembaca layar menyebutkannya
+                  dua kali. */}
+              <span className={`tab__num${terisi ? ' is-done' : ''}`} aria-hidden="true">
+                {terisi ? <Icon name="check" size={13} strokeWidth={3} /> : t.num}
+              </span>
+              <Icon name={t.icon} size={19} className="tab__ico" />
+              <span className="tab__label">{t.label}</span>
+              <span className="tab__short">{t.short}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* <div>, bukan <main class="view"> — .view sudah dipakai di induknya,

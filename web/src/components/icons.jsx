@@ -76,6 +76,16 @@ const GLYPHS = {
     </>
   ),
 
+  /* --- Status langkah --- */
+
+  // Langkah pengisian sudah lengkap. Dipakai di chip .tab__num.
+  // Digambar lebih tebal daripada ikon lain (lihat strokeWidth di
+  // pemanggilnya) karena hanya setinggi 13px di dalam kotak 22px —
+  // dengan tebal 1.8 garisnya tenggelam dan centangnya tidak terbaca.
+  check: (
+    <polyline points="4.5 12.5 9.5 17.5 19.5 7" />
+  ),
+
   /* --- Menu akun --- */
 
   // Ganti Sandi. Versi pertama punya pusat tinta di (12.5, 11.5),
