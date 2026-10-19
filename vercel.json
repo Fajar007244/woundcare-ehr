@@ -10,7 +10,13 @@
     "web": {
       "root": "web",
       "framework": "vite",
-      "installCommand": "npm install"
+      "installCommand": "npm install",
+      "rewrites": [
+        {
+          "source": "/((?!api/).*)",
+          "destination": "/index.html"
+        }
+      ]
     }
   },
 
