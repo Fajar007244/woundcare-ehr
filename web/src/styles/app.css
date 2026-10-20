@@ -1761,6 +1761,13 @@ tr.is-changed::after { inset: 0; }
     max-width: 100%;
   }
   .tab.is-active {
+    /* `color` WAJIB ditulis ulang di sini — ini bukan hiasan.
+       Aturan layar lebar menyetel teks PUTIH karena latarnya pil teal
+       gelap. Di bilah bawah latarnya kembali --c-primary-soft yang pucat,
+       jadi tanpa baris ini ikon dan label tab aktif berwarna putih di
+       atas putih susu: praktis tak terlihat. Versi lama tidak kena
+       masalah ini karena base-nya memakai --c-primary-dark, bukan #fff. */
+    color: var(--c-primary-dark);
     border-bottom-color: transparent;
     background: var(--c-primary-soft);
     box-shadow: inset 0 3px 0 var(--c-primary);
