@@ -335,6 +335,13 @@ const PrintDoc = (() => {
     const total = res ? res.sum : null;
     const b = total !== null ? Scales.band(total) : null;
 
+    /* Estimasi edukatif, bukan prognosis. Rumus dan label "perkiraan"
+       ikut dicetak supaya angka tidak dibaca sebagai kepastian medis. */
+    const estimasi = Scales.healingWeeks(total);
+    const rentangBand = Scales.BANDS
+      .map(x => (x.min === x.max ? String(x.min) : `${x.min}–${x.max}`))
+      .join(' · ');
+
     const rows = Scales.ITEMS.map((it, i) => {
       const val = Number(scores[it.key]);
       const note = scores['note_' + it.key] || (v.winner.notes && v.winner.notes[it.key]) || '';
@@ -366,14 +373,23 @@ const PrintDoc = (() => {
         <tr>
           <td colspan="7" style="text-align:center;padding:3mm">
             <span style="font-size:20pt;font-weight:700;font-family:'Cascadia Mono',Consolas,monospace">${total !== null ? total : '—'}</span>
-            &nbsp;&nbsp;/ 65&nbsp;&nbsp;
+            &nbsp;&nbsp;/ ${Scales.MAX_TOTAL}&nbsp;&nbsp;
             ${b ? `<b>${esc(b.label)}</b>` : '<i>Belum dinilai lengkap</i>'}
+          </td>
+        </tr>
+        <tr>
+          <td colspan="7" style="text-align:center;padding:2mm">
+            Perkiraan penyembuhan:
+            <b>${estimasi !== null ? esc(String(estimasi)) + ' minggu' : '—'}</b>
+            <span style="font-size:8pt;color:#666">
+              &nbsp;(total &times; ${Scales.HEALING_NUMERATOR} &divide; ${Scales.HEALING_DIVISOR} &mdash; estimasi edukatif, bukan prognosis)
+            </span>
           </td>
         </tr>
       </table>
       <p class="pr-legend">
-        Skor 13 = epitelisasi lengkap (sembuh) · Skor 65 = kondisi sangat buruk ·
-        13–24 sangat ringan · 25–38 ringan–sedang · 39–52 sedang–berat · 53–65 sangat buruk.
+        Skor ${Scales.MIN_TOTAL} = epitelisasi lengkap (sembuh) · Skor ${Scales.MAX_TOTAL} = kondisi sangat buruk ·
+        ${rentangBand}.
         Jangkar kriteria untuk setiap skor tersedia pada aplikasi digital WoundCare EHR.
       </p>
     </div>`;

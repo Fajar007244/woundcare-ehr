@@ -53,17 +53,23 @@ const Charts = (() => {
     const W = cssW - M.left - M.right;
     const H = cssH - M.top - M.bottom;
 
-    const yMin = Scales.MIN_TOTAL;   // 13
-    const yMax = Scales.MAX_TOTAL;   // 65
+    const yMin = Scales.MIN_TOTAL;
+    const yMax = Scales.MAX_TOTAL;
 
     const xAt = i => M.left + (data.length === 1 ? W / 2 : (i / (data.length - 1)) * W);
     const yAt = v => M.top + ((v - yMin) / (yMax - yMin)) * H;
 
-    /* --- Latar zona --- */
+    /* --- Latar zona ---
+       Batas zona hijau memakai ujung band "Sangat Ringan" dari Scales,
+       bukan angka tetap, supaya tetap sejalan bila band disesuaikan.
+       Zona merah sengaja digambar dari MAX_TOTAL ke dasar; tingginya nol
+       pada skala sekarang, tetapi rumusnya tetap benar bila rentang
+       berubah lagi. */
     ctx.fillStyle = COLORS.bandOk;
-    ctx.fillRect(M.left, yAt(24), W, yAt(yMin) - yAt(24));
+    const batasRingan = Scales.BANDS[1].max;
+    ctx.fillRect(M.left, yAt(batasRingan), W, yAt(yMin) - yAt(batasRingan));
     ctx.fillStyle = COLORS.bandBad;
-    ctx.fillRect(M.left, yAt(65), W, M.top + H - yAt(65));
+    ctx.fillRect(M.left, yAt(yMax), W, M.top + H - yAt(yMax));
 
     /* --- Grid + label Y --- */
     ctx.font = '11px "Cascadia Mono", Consolas, monospace';
@@ -195,8 +201,9 @@ const Charts = (() => {
     }
 
     /* --- Seri NRS (opsional) ---
-       NRS punya rentang 0..10, sedangkan sumbu utama adalah 13..65 (skor
-       WINNER). Memakai yAt() langsung membuat yAt(2) jatuh DI ATAS area
+       NRS punya rentang 0..10, sedangkan sumbu utama adalah rentang skor
+       WINNER (Scales.MIN_TOTAL..Scales.MAX_TOTAL). Memakai yAt() langsung
+       membuat yAt(2) jatuh DI ATAS area
        gambar, sehingga garisnya tidak pernah terlihat sama sekali —
        chip "Nyeri" terlihat hidup padahal tidak ada garis. Skala sendiri:
        0 di dasar, 10 di puncak area gambar. */

@@ -1,0 +1,98 @@
+﻿/* Halaman Persediaan — tambahan di atas app.css. */
+
+.inv-summary { margin-bottom: 20px; }
+
+.inv-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.inv-toolbar .search-inline { flex: 1 1 220px; margin-bottom: 0; }
+.inv-toolbar .search-inline input { width: 100%; }
+
+.inv-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.inv-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--c-border);
+  border-radius: 999px;
+  background: var(--c-surface);
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+}
+.inv-chip.is-active {
+  background: var(--c-primary-soft);
+  border-color: var(--c-primary);
+  color: var(--c-primary);
+  font-weight: 600;
+}
+.inv-chip input { margin: 0; }
+
+.inv-low-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--c-text-muted);
+}
+
+.inv-row--low { background: var(--c-warn-soft); }
+.inv-row--low td { border-bottom-color: #fcd34d; }
+
+.inv-cards { display: none; }
+.inv-card {
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+.inv-card__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.inv-card__title { font-weight: 650; font-size: 14px; }
+.inv-card__code { font-family: var(--font-mono); font-size: 11.5px; color: var(--c-text-muted); }
+.inv-card__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+  font-size: 12.5px;
+}
+.inv-card__kv { display: flex; flex-direction: column; }
+.inv-card__kv span { font-size: 11px; color: var(--c-text-muted); }
+.inv-card__kv b { font-weight: 600; }
+.inv-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.inv-usage-line {
+  display: grid;
+  grid-template-columns: 1fr 90px 36px;
+  gap: 8px;
+  align-items: end;
+  margin-bottom: 8px;
+}
+.inv-usage-line select, .inv-usage-line input { width: 100%; }
+
+@media (max-width: 860px) {
+  .inv-table-wrap { display: none; }
+  .inv-cards { display: block; }
+  .inv-usage-line { grid-template-columns: 1fr 80px 32px; }
+}

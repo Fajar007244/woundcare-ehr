@@ -156,11 +156,155 @@ CREATE TABLE IF NOT EXISTS clinic_config (
   diubah TEXT NOT NULL
 );
 
+/* ------------------------------------------------------------
+   PERSEDIAAN & KEUANGAN
+
+   Kenapa SEMUA nominal uang dan jumlah stok INTEGER:
+
+   1. Rupiah tidak punya pecahan sen di praktik klinik. Harga obat
+      Rp 1.000, bukan Rp 1.000,00. Menyimpannya sebagai NUMERIC akan
+      membuat driver pg mengembalikan STRING (bukan number) demi
+      menjaga presisi, lalu setiap penjumlahan di JavaScript harus
+      di-parse ulang — dan satu tempat yang lupa parse menghasilkan
+      "1000" + "2000" = "10002000" yang tampak seperti angka.
+   2. Tidak ada pembulatan: total invoice selalu sama dengan jumlah
+      baris yang tertulis di nota. Kasir dan laporan tidak pernah
+      berselisih satu rupiah karena galat floating point.
+   3. Stok adalah satuan bulat (tablet, botol, pasang). Setengah
+      tablet bukan transaksi yang sah di klinik ini.
+
+   Karena itu setiap nilai dari body permintaan diperiksa dengan
+   Math.trunc + Number.isFinite sebelum masuk SQL. Nilai pecahan
+   dibulatkan ke bawah, nilai bukan angka ditolak.
+   ------------------------------------------------------------ */
+
+CREATE TABLE IF NOT EXISTS items (
+  id         TEXT PRIMARY KEY,
+  kode       TEXT NOT NULL DEFAULT '',
+  nama       TEXT NOT NULL,
+  jenis      TEXT NOT NULL DEFAULT 'obat',   /* 'obat' | 'bmhp' */
+  satuan     TEXT NOT NULL DEFAULT '',
+  harga_beli INTEGER NOT NULL DEFAULT 0,
+  harga_jual INTEGER NOT NULL DEFAULT 0,
+  stok       INTEGER NOT NULL DEFAULT 0,
+  stok_min   INTEGER NOT NULL DEFAULT 0,
+  aktif      INTEGER NOT NULL DEFAULT 1,
+  catatan    TEXT NOT NULL DEFAULT '',
+  dibuat     TEXT NOT NULL,
+  diubah     TEXT NOT NULL
+);
+
+/* Riwayat pergerakan stok. Baris di sini TIDAK PERNAH dihapus, karena
+   inilah bukti audit kenapa stok berkurang. stok_akhir disalin saat
+   penulisan supaya riwayat tetap bisa dibaca meski harga/stok master
+   berubah kemudian. visit_id/invoice_id sengaja tanpa foreign key:
+   pemakaian obat sudah terjadi walau kunjungannya kemudian dihapus,
+   dan catatan stoknya harus tetap ada. */
+CREATE TABLE IF NOT EXISTS stock_moves (
+  id         TEXT PRIMARY KEY,
+  item_id    TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+  jenis      TEXT NOT NULL,                  /* 'masuk' | 'keluar' | 'koreksi' */
+  jumlah     INTEGER NOT NULL,
+  stok_akhir INTEGER NOT NULL,
+  alasan     TEXT NOT NULL DEFAULT '',
+  visit_id   TEXT,
+  patient_id TEXT,
+  invoice_id TEXT,
+  oleh_id    INTEGER,
+  oleh_nama  TEXT NOT NULL DEFAULT '',
+  pada       TEXT NOT NULL
+);
+
+/* Nomor invoice unik: satu nomor tidak boleh dipakai dua kali walau
+   dua petugas menagih pada detik yang sama. */
+CREATE TABLE IF NOT EXISTS invoices (
+  id           TEXT PRIMARY KEY,
+  nomor        TEXT NOT NULL UNIQUE,
+  patient_id   TEXT NOT NULL DEFAULT '',
+  patient_nama TEXT NOT NULL DEFAULT '',
+  visit_id     TEXT NOT NULL DEFAULT '',
+  tanggal      TEXT NOT NULL DEFAULT '',
+  subtotal     INTEGER NOT NULL DEFAULT 0,
+  diskon       INTEGER NOT NULL DEFAULT 0,
+  total        INTEGER NOT NULL DEFAULT 0,
+  dibayar      INTEGER NOT NULL DEFAULT 0,
+  status       TEXT NOT NULL DEFAULT 'belum', /* 'belum'|'sebagian'|'lunas'|'batal' */
+  catatan      TEXT NOT NULL DEFAULT '',
+  oleh_id      INTEGER,
+  oleh_nama    TEXT NOT NULL DEFAULT '',
+  dibuat       TEXT NOT NULL,
+  diubah       TEXT NOT NULL
+);
+
+/* Baris tagihan. nama, satuan, dan harga DISALIN dari master
+   saat transaksi, bukan dibaca lewat JOIN. Kalau harga barang naik
+   bulan depan, nota lama tidak boleh ikut berubah — nota adalah
+   dokumen hukum, bukan tampilan master data. */
+CREATE TABLE IF NOT EXISTS invoice_lines (
+  id         TEXT PRIMARY KEY,
+  invoice_id TEXT NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+  jenis      TEXT NOT NULL DEFAULT 'tindakan', /* 'tindakan'|'obat'|'bmhp' */
+  item_id    TEXT NOT NULL DEFAULT '',
+  nama       TEXT NOT NULL DEFAULT '',
+  qty        INTEGER NOT NULL DEFAULT 1,
+  satuan     TEXT NOT NULL DEFAULT '',
+  harga      INTEGER NOT NULL DEFAULT 0,
+  jumlah     INTEGER NOT NULL DEFAULT 0,
+  urut       INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS payments (
+  id         TEXT PRIMARY KEY,
+  invoice_id TEXT NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+  tanggal    TEXT NOT NULL DEFAULT '',
+  metode     TEXT NOT NULL DEFAULT 'tunai',   /* 'tunai'|'transfer'|'kartu'|'qris' */
+  jumlah     INTEGER NOT NULL DEFAULT 0,
+  catatan    TEXT NOT NULL DEFAULT '',
+  oleh_id    INTEGER,
+  oleh_nama  TEXT NOT NULL DEFAULT '',
+  pada       TEXT NOT NULL
+);
+
+/* Jejak perubahan modul persediaan & kasir.
+   Dipisahkan dari audit_log (yang berpaut pada kunjungan) karena mengubah
+   harga barang atau membatalkan invoice bukan perubahan rekam medis, dan
+   harus bisa dibaca per modul.
+
+   Baris ditulis DI DALAM transaksi perubahan yang bersangkutan. Kalau
+   pencatatannya gagal, perubahannya ikut dibatalkan: riwayat audit yang
+   bisa hilang diam-diam lebih berbahaya daripada tidak punya riwayat. */
+CREATE TABLE IF NOT EXISTS finance_log (
+  id        TEXT PRIMARY KEY,
+  modul     TEXT NOT NULL,                   /* 'persediaan' | 'kasir' */
+  aksi      TEXT NOT NULL,                   /* lihat MODUL_LOG di bawah */
+  ref_id    TEXT NOT NULL DEFAULT '',
+  judul     TEXT NOT NULL DEFAULT '',
+  detail    TEXT NOT NULL DEFAULT '',
+  oleh_id   INTEGER,
+  oleh_nama TEXT NOT NULL DEFAULT '',
+  pada      TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS ix_visits_patient ON visits(patient_id);
 CREATE INDEX IF NOT EXISTS ix_audit_visit    ON audit_log(visit_id);
 CREATE INDEX IF NOT EXISTS ix_audit_patient  ON audit_log(patient_id);
 CREATE INDEX IF NOT EXISTS ix_sessions_exp   ON sessions(expires);
 CREATE INDEX IF NOT EXISTS ix_photos_visit   ON photos(visit_id);
+
+/* Indeks untuk pola akses yang benar-benar dipakai:
+   - riwayat stok selalu ditanya per barang, terbaru dulu
+   - baris invoice selalu diambil per invoice
+   - daftar & laporan invoice disaring rentang tanggal
+   - pemakaian per kunjungan dicari saat confirmUsage
+   - pembayaran per invoice dijumlahkan saat menghitung sisa */
+CREATE INDEX IF NOT EXISTS ix_stock_item      ON stock_moves(item_id, pada DESC);
+CREATE INDEX IF NOT EXISTS ix_stock_visit     ON stock_moves(visit_id);
+CREATE INDEX IF NOT EXISTS ix_lines_invoice   ON invoice_lines(invoice_id);
+CREATE INDEX IF NOT EXISTS ix_invoices_tgl    ON invoices(tanggal);
+CREATE INDEX IF NOT EXISTS ix_invoices_visit  ON invoices(visit_id);
+CREATE INDEX IF NOT EXISTS ix_payments_invoice ON payments(invoice_id);
+CREATE INDEX IF NOT EXISTS ix_payments_tgl    ON payments(tanggal);
+CREATE INDEX IF NOT EXISTS ix_flog_modul      ON finance_log(modul, pada DESC);
 `;
 
 /* ---------- Password ---------- */
@@ -202,6 +346,7 @@ function ready() {
     }
     await pool.query(SCHEMA);
     await seedIfEmpty();
+    await seedItemsIfEmpty();
     await ensureAdminExists();
     return true;
   })();
@@ -251,6 +396,51 @@ async function seedIfEmpty() {
   }
   console.log('  [db] pengguna awal dibuat: ' + DEFAULT_USERS.map(u => u.username).join(', '));
   console.log('  [db] sandi awal: woundcare123  (ganti setelah masuk pertama)');
+}
+
+/**
+ * Barang contoh untuk klinik perawatan luka.
+ *
+ * ID-nya ditulis tetap (bukan acak) supaya seed ini idempoten: dijalankan
+ * berkali-kali pun tidak menambah baris baru, dan pemeriksaan "tabel kosong"
+ * di bawah membuat data asli pengguna tidak pernah tersentuh.
+ *
+ * Dua barang sengaja berstok di bawah stok_min (Ketorolac dan NaCl) agar
+ * peringatan stok rendah punya contoh nyata saat pertama kali dicoba.
+ */
+const DEFAULT_ITEMS = [
+  { id: 'it_paracetamol', kode: 'OBT-001', nama: 'Paracetamol 500mg', jenis: 'obat', satuan: 'tablet',
+    harga_beli: 300,    harga_jual: 1000,  stok: 120, stok_min: 30, catatan: 'Pereda nyeri, tablet oral' },
+  { id: 'it_amoxicillin', kode: 'OBT-002', nama: 'Amoxicillin 500mg', jenis: 'obat', satuan: 'kapsul',
+    harga_beli: 800,    harga_jual: 2000,  stok: 80,  stok_min: 30, catatan: 'Antibiotik, kapsul oral' },
+  { id: 'it_ketorolac',   kode: 'OBT-003', nama: 'Ketorolac 30mg', jenis: 'obat', satuan: 'ampul',
+    harga_beli: 4000,   harga_jual: 10000, stok: 6,   stok_min: 10, catatan: 'Analgesik injeksi, simpan di suhu ruang' },
+  { id: 'it_metronidazole', kode: 'OBT-004', nama: 'Metronidazole 500mg', jenis: 'obat', satuan: 'tablet',
+    harga_beli: 500,    harga_jual: 1500,  stok: 60,  stok_min: 20, catatan: 'Antibiotik anaerob, tablet oral' },
+  { id: 'it_kasa',        kode: 'BMH-001', nama: 'Kasa Steril', jenis: 'bmhp', satuan: 'pak',
+    harga_beli: 2500,   harga_jual: 5000,  stok: 40,  stok_min: 20, catatan: 'Kasa steril 16x16 cm, per pak' },
+  { id: 'it_nacl',        kode: 'BMH-002', nama: 'NaCl 0,9% 500ml', jenis: 'bmhp', satuan: 'botol',
+    harga_beli: 8000,   harga_jual: 15000, stok: 8,   stok_min: 12, catatan: 'Cairan irigasi luka' },
+  { id: 'it_povidone',    kode: 'BMH-003', nama: 'Povidone Iodine 60ml', jenis: 'bmhp', satuan: 'botol',
+    harga_beli: 9000,   harga_jual: 18000, stok: 20,  stok_min: 10, catatan: 'Antiseptik luka' },
+  { id: 'it_handscoon',   kode: 'BMH-004', nama: 'Handscoon Steril', jenis: 'bmhp', satuan: 'pasang',
+    harga_beli: 3000,   harga_jual: 6000,  stok: 50,  stok_min: 25, catatan: 'Sarung tangan steril, per pasang' }
+];
+
+async function seedItemsIfEmpty() {
+  const n = (await pool.query('SELECT COUNT(*) AS c FROM items')).rows[0].c;
+  if (Number(n) > 0) return;
+  const pada = nowISO();
+  for (const it of DEFAULT_ITEMS) {
+    await pool.query(
+      `INSERT INTO items (id, kode, nama, jenis, satuan, harga_beli, harga_jual, stok, stok_min, aktif, catatan, dibuat, diubah)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1, $10, $11, $11)
+       ON CONFLICT(id) DO NOTHING`,
+      [it.id, it.kode, it.nama, it.jenis, it.satuan,
+       it.harga_beli, it.harga_jual, it.stok, it.stok_min, it.catatan, pada]
+    );
+  }
+  console.log('  [db] barang contoh dibuat: ' + DEFAULT_ITEMS.length + ' item (obat & BMHP)');
 }
 
 /**
@@ -984,6 +1174,980 @@ async function accessCount() {
   return Number(r.rows[0].c);
 }
 
+/* ---------- Persediaan & keuangan ----------
+ *
+ * Rantai bisnis yang dijaga di sini:
+ *
+ *   obat diserahkan / BMHP dipakai
+ *        -> stok berkurang (stock_moves)
+ *        -> baris invoice bertambah (invoice_lines)
+ *        -> pembayaran masuk (payments)
+ *        -> laporan pendapatan
+ *
+ * Setiap mata rantai ditulis di dalam SATU transaksi. Alasannya bukan
+ * kerapian, melainkan uang dan barang: kalau stok sempat berkurang tetapi
+ * invoice gagal dibuat, klinik kehilangan barang tanpa tagihan. Kalau
+ * invoice sempat dibuat tetapi stok gagal berkurang, catatan dan rak fisik
+ * berbeda tanpa cara mengetahui selisihnya. Keduanya harus jatuh bersama.
+ */
+
+const JENIS_ITEM = ['obat', 'bmhp'];
+const JENIS_MOVE = ['masuk', 'keluar', 'koreksi'];
+const STATUS_INVOICE = ['belum', 'sebagian', 'lunas', 'batal'];
+const METODE_BAYAR = ['tunai', 'transfer', 'kartu', 'qris'];
+const MODUL_LOG = ['persediaan', 'kasir'];
+
+/** ID acak pendek. Teks, bukan SERIAL, supaya bisa dibentuk sebelum INSERT
+    dan aman dipakai langsung di URL tanpa escaping tambahan. */
+function idBaru(prefix) {
+  return prefix + Date.now().toString(36) + crypto.randomBytes(4).toString('hex');
+}
+
+/**
+ * Tanggal bisnis (YYYY-MM-DD) memakai zona waktu SERVER, bukan UTC.
+ * nowISO() tetap dipakai untuk jejak waktu teknis; tanggal nota harus
+ * tanggal yang dilihat kasir di dinding. Di WIB/WITA/WIT, tanggal UTC bisa
+ * berbeda satu hari pada pagi buta — invoice tanggal 1 bisa tercatat
+ * tanggal 31 bulan sebelumnya.
+ */
+function tanggalHariIni(d = new Date()) {
+  return d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0');
+}
+
+/**
+ * Paksa nilai menjadi bilangan bulat. Uang dan stok disimpan INTEGER
+ * (lihat komentar skema), jadi di sini pecahan dipotong ke bawah dan nilai
+ * bukan angka DITOLAK — bukan diam-diam menjadi 0, karena 0 yang salah
+ * lebih berbahaya daripada pesan galat.
+ */
+function bulat(v, label) {
+  const n = Math.trunc(Number(v));
+  if (!Number.isFinite(n)) throw new Error((label || 'Angka') + ' tidak valid.');
+  return n;
+}
+
+/** Tambahkan saringan rentang tanggal ke daftar syarat + parameter.
+    Dipakai berulang supaya penomoran $n tidak pernah tertukar. */
+function tambahTanggal(syarat, nilai, kolom, dari, sampai) {
+  if (dari) { nilai.push(String(dari)); syarat.push(kolom + ' >= $' + nilai.length); }
+  if (sampai) { nilai.push(String(sampai)); syarat.push(kolom + ' <= $' + nilai.length); }
+}
+
+const olehDari = (oleh) => ({
+  id: oleh && oleh.id != null ? Number(oleh.id) : null,
+  nama: (oleh && oleh.nama) ? String(oleh.nama) : 'Tanpa nama'
+});
+
+/**
+ * Tulis satu baris jejak perubahan modul persediaan/kasir.
+ *
+ * `q` boleh berupa client transaksi (supaya tercatat atomik bersama
+ * perubahannya) atau pool. Pemanggil yang sedang di dalam transaksi WAJIB
+ * mengirim client-nya — memakai pool di tengah transaksi berarti barisnya
+ * bisa COMMIT walau transaksi induknya ROLLBACK.
+ */
+async function catatLog(q, { modul, aksi, refId, judul, detail, oleh } = {}) {
+  if (MODUL_LOG.indexOf(String(modul)) < 0) {
+    throw new Error('Modul jejak perubahan tidak dikenal.');
+  }
+  const org = olehDari(oleh);
+  await q.query(
+    `INSERT INTO finance_log
+       (id, modul, aksi, ref_id, judul, detail, oleh_id, oleh_nama, pada)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    [idBaru('fl_'), String(modul), String(aksi || ''), String(refId || ''),
+     String(judul || ''), String(detail || ''), org.id, org.nama, nowISO()]
+  );
+}
+
+/* ---------- Barang (obat & BMHP) ---------- */
+
+async function listItems({ jenis, aktif } = {}) {
+  await ready();
+  const syarat = [];
+  const nilai = [];
+  if (jenis && JENIS_ITEM.indexOf(String(jenis)) >= 0) {
+    nilai.push(String(jenis)); syarat.push('jenis = $' + nilai.length);
+  }
+  /* `aktif` sengaja TIDAK default ke 1: layar riwayat stok perlu
+     menampilkan barang yang sudah dinonaktifkan agar auditnya terbaca.
+     Pemanggil yang hanya ingin barang hidup mengirim aktif=1. */
+  if (aktif !== undefined && aktif !== null && aktif !== '') {
+    nilai.push(Number(aktif) ? 1 : 0);
+    syarat.push('aktif = $' + nilai.length);
+  }
+  const where = syarat.length ? ' WHERE ' + syarat.join(' AND ') : '';
+  const r = await pool.query('SELECT * FROM items' + where + ' ORDER BY jenis, nama', nilai);
+  return r.rows;
+}
+
+/**
+ * Simpan barang baru atau ubah barang yang sudah ada.
+ *
+ * Stok TIDAK diambil dari body untuk baris yang sudah ada. Satu-satunya
+ * jalan mengubah stok adalah addStockMove()/confirmUsage(), sehingga setiap
+ * perubahan punya pelaku, alasan, dan stok akhir. Kalau admin bisa mengetik
+ * ulang angka stok, barang hilang bisa "dirapikan" tanpa jejak.
+ */
+async function saveItem(item) {
+  await ready();
+  const b = item || {};
+  const nama = String(b.nama || '').trim();
+  if (!nama) throw new Error('Nama barang wajib diisi.');
+
+  if (b.jenis !== undefined && b.jenis !== null && b.jenis !== '' &&
+      JENIS_ITEM.indexOf(String(b.jenis)) < 0) {
+    throw new Error('Jenis barang harus obat atau bmhp.');
+  }
+
+  const id = b.id ? String(b.id) : idBaru('it_');
+  const lama = (await pool.query('SELECT * FROM items WHERE id = $1', [id])).rows[0] || null;
+  const jenis = b.jenis ? String(b.jenis) : (lama ? lama.jenis : 'obat');
+
+  const pilih = (kunci, bawaan) =>
+    b[kunci] === undefined || b[kunci] === null ? bawaan : b[kunci];
+
+  const hargaBeli = bulat(pilih('harga_beli', lama ? lama.harga_beli : 0), 'Harga beli');
+  const hargaJual = bulat(pilih('harga_jual', lama ? lama.harga_jual : 0), 'Harga jual');
+  const stokMin = bulat(pilih('stok_min', lama ? lama.stok_min : 0), 'Stok minimum');
+  if (hargaBeli < 0 || hargaJual < 0 || stokMin < 0) {
+    throw new Error('Harga dan stok minimum tidak boleh negatif.');
+  }
+
+  const stokAwal = lama ? Number(lama.stok) : Math.max(0, bulat(pilih('stok', 0), 'Stok'));
+  const aktif = b.aktif === undefined || b.aktif === null
+    ? (lama ? Number(lama.aktif) : 1)
+    : (b.aktif ? 1 : 0);
+
+  const pada = nowISO();
+  const kode = String(pilih('kode', lama ? lama.kode : '') || '').trim();
+  const satuan = String(pilih('satuan', lama ? lama.satuan : '') || '').trim();
+  const catatan = String(pilih('catatan', lama ? lama.catatan : '') || '');
+
+  /* Ringkasan perubahan disusun dari selisih nilai lama vs baru, bukan dari
+     apa yang dikirim klien: kolom yang tidak dikirim tidak muncul sebagai
+     "berubah" hanya karena bentuk body-nya berbeda. */
+  let detail;
+  if (!lama) {
+    detail = 'barang baru, stok awal ' + stokAwal + (satuan ? ' ' + satuan : '');
+  } else {
+    const beda = [];
+    if (String(lama.nama) !== nama) beda.push('nama "' + lama.nama + '" → "' + nama + '"');
+    if (String(lama.jenis) !== jenis) beda.push('jenis ' + lama.jenis + ' → ' + jenis);
+    if (Number(lama.harga_beli) !== hargaBeli) beda.push('harga beli Rp' + lama.harga_beli + ' → Rp' + hargaBeli);
+    if (Number(lama.harga_jual) !== hargaJual) beda.push('harga jual Rp' + lama.harga_jual + ' → Rp' + hargaJual);
+    if (Number(lama.stok_min) !== stokMin) beda.push('stok minimum ' + lama.stok_min + ' → ' + stokMin);
+    if (Number(lama.aktif) !== aktif) beda.push(aktif ? 'diaktifkan' : 'dinonaktifkan');
+    detail = beda.length ? beda.join('; ') : 'disimpan tanpa perubahan nilai';
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const r = await client.query(
+      `INSERT INTO items (id, kode, nama, jenis, satuan, harga_beli, harga_jual, stok, stok_min, aktif, catatan, dibuat, diubah)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+       ON CONFLICT(id) DO UPDATE SET
+         kode = excluded.kode, nama = excluded.nama, jenis = excluded.jenis,
+         satuan = excluded.satuan, harga_beli = excluded.harga_beli,
+         harga_jual = excluded.harga_jual, stok_min = excluded.stok_min,
+         aktif = excluded.aktif, catatan = excluded.catatan, diubah = excluded.diubah
+       RETURNING *`,
+      [id, kode, nama, jenis, satuan, hargaBeli, hargaJual, stokAwal, stokMin, aktif, catatan,
+       lama ? lama.dibuat : pada, pada]
+    );
+    const row = r.rows[0];
+    await catatLog(client, {
+      modul: 'persediaan',
+      aksi: lama ? 'barang_ubah' : 'barang_baru',
+      refId: row.id,
+      judul: row.nama,
+      detail,
+      oleh: b.oleh
+    });
+    await client.query('COMMIT');
+    return row;
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Nonaktifkan barang — TIDAK menghapus barisnya.
+ *
+ * stock_moves dan invoice_lines merujuk riwayat barang ini. Menghapus
+ * barisnya akan memutus jejak audit (dan karena FK ON DELETE CASCADE pada
+ * stock_moves, riwayatnya ikut lenyap). Barang yang masih berstok juga
+ * ditolak: menonaktifkan barang berstok membuat stok fisik tak bisa
+ * dipakai lagi tetapi tetap tercatat sebagai aset.
+ */
+async function deleteItem(id, oleh) {
+  await ready();
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const r = await client.query('SELECT * FROM items WHERE id = $1 FOR UPDATE', [String(id)]);
+    const it = r.rows[0];
+    if (!it) throw new Error('Barang tidak ditemukan.');
+    if (Number(it.stok) > 0) {
+      throw new Error('Stok ' + it.nama + ' masih ' + it.stok + ' ' + (it.satuan || '') +
+        '. Kosongkan lewat koreksi stok sebelum menonaktifkan.');
+    }
+    if (Number(it.aktif) === 0) throw new Error('Barang ' + it.nama + ' sudah nonaktif.');
+
+    await client.query('UPDATE items SET aktif = 0, diubah = $1 WHERE id = $2', [nowISO(), it.id]);
+    await catatLog(client, {
+      modul: 'persediaan',
+      aksi: 'barang_nonaktif',
+      refId: it.id,
+      judul: it.nama,
+      detail: 'dinonaktifkan; baris dan riwayat stok tetap disimpan',
+      oleh
+    });
+    await client.query('COMMIT');
+    return Object.assign({}, it, { aktif: 0 });
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+/* ---------- Pergerakan stok ---------- */
+
+/**
+ * Catat penerimaan / koreksi / pengeluaran stok secara manual.
+ *
+ * Semua perubahan stok lewat satu pintu ini (confirmUsage memakai pola yang
+ * sama di dalam transaksinya). Urutannya:
+ *   BEGIN -> SELECT ... FOR UPDATE -> validasi -> UPDATE items -> INSERT
+ *   stock_moves -> COMMIT, dan ROLLBACK pada galat apa pun.
+ *
+ * FOR UPDATE mengunci baris barang sampai transaksi selesai. Tanpa itu, dua
+ * petugas yang mengeluarkan barang bersamaan bisa sama-sama membaca stok 10,
+ * sama-sama mengurangi 8, dan stok akhir menjadi 2 padahal seharusnya -6.
+ *
+ * `koreksi` adalah SELISIH, bukan angka stok baru: jumlah = -3 berarti
+ * "stok fisik 3 lebih sedikit dari catatan". Dengan begitu pergerakan tetap
+ * punya arah dan bisa dijumlahkan seperti mutasi lain.
+ */
+async function addStockMove({ itemId, jenis, jumlah, alasan, visitId, patientId, oleh } = {}) {
+  await ready();
+  const jns = String(jenis || '');
+  if (JENIS_MOVE.indexOf(jns) < 0) throw new Error('Jenis pergerakan stok tidak dikenal.');
+  const n = bulat(jumlah, 'Jumlah');
+  if (jns === 'koreksi') {
+    if (n === 0) throw new Error('Koreksi nol tidak mengubah apa pun.');
+  } else if (n <= 0) {
+    throw new Error('Jumlah harus lebih dari nol.');
+  }
+
+  const org = olehDari(oleh);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const r = await client.query('SELECT * FROM items WHERE id = $1 FOR UPDATE', [String(itemId)]);
+    const it = r.rows[0];
+    if (!it) throw new Error('Barang tidak ditemukan.');
+    if (Number(it.aktif) !== 1) throw new Error('Barang ' + it.nama + ' sudah nonaktif.');
+
+    const akhir = jns === 'keluar' ? Number(it.stok) - n : Number(it.stok) + n;
+    if (akhir < 0) {
+      throw new Error('Stok ' + it.nama + ' tidak cukup: tersedia ' + it.stok +
+        ' ' + (it.satuan || '') + ', diminta ' + n + '.');
+    }
+
+    const pada = nowISO();
+    const keterangan = String(alasan || '').trim() ||
+      (jns === 'masuk' ? 'Penerimaan barang' : (jns === 'keluar' ? 'Pengeluaran barang' : 'Koreksi stok'));
+
+    await client.query('UPDATE items SET stok = $1, diubah = $2 WHERE id = $3',
+      [akhir, pada, it.id]);
+
+    const m = await client.query(
+      `INSERT INTO stock_moves
+         (id, item_id, jenis, jumlah, stok_akhir, alasan, visit_id, patient_id, invoice_id, oleh_id, oleh_nama, pada)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULL, $9, $10, $11)
+       RETURNING *`,
+      [idBaru('sm_'), it.id, jns, n, akhir, keterangan,
+       visitId ? String(visitId) : null, patientId ? String(patientId) : null,
+       org.id, org.nama, pada]
+    );
+
+    await catatLog(client, {
+      modul: 'persediaan',
+      aksi: jns === 'masuk' ? 'stok_masuk' : (jns === 'koreksi' ? 'stok_koreksi' : 'stok_keluar'),
+      refId: it.id,
+      judul: it.nama,
+      detail: (jns === 'masuk' ? '+' : (jns === 'koreksi' && n > 0 ? '+' : '')) + n +
+        (it.satuan ? ' ' + it.satuan : '') + ', stok ' + it.stok + ' → ' + akhir +
+        ' — ' + keterangan,
+      oleh: org
+    });
+
+    await client.query('COMMIT');
+    return { move: m.rows[0], item: Object.assign({}, it, { stok: akhir }) };
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+async function listStockMoves({ itemId, limit } = {}) {
+  await ready();
+  const n = Math.min(Math.max(parseInt(limit, 10) || 100, 1), 500);
+  const syarat = [];
+  const nilai = [];
+  if (itemId) { nilai.push(String(itemId)); syarat.push('m.item_id = $' + nilai.length); }
+  nilai.push(n);
+  const r = await pool.query(
+    `SELECT m.*, i.nama, i.satuan, i.jenis AS jenis_item
+     FROM stock_moves m LEFT JOIN items i ON i.id = m.item_id` +
+    (syarat.length ? ' WHERE ' + syarat.join(' AND ') : '') +
+    ' ORDER BY m.pada DESC, m.id DESC LIMIT $' + nilai.length,
+    nilai
+  );
+  return r.rows;
+}
+
+/**
+ * Riwayat perubahan untuk satu modul, terbaru dulu.
+ * Hanya admin yang boleh memanggil (dicek di server.js); isinya menyebut
+ * siapa mengubah harga, siapa menerima uang, dan siapa membatalkan tagihan.
+ */
+async function listFinanceLog({ modul, limit } = {}) {
+  await ready();
+  const n = Math.min(Math.max(parseInt(limit, 10) || 200, 1), 500);
+  const syarat = [];
+  const nilai = [];
+
+  if (modul) {
+    if (MODUL_LOG.indexOf(String(modul)) < 0) throw new Error('Modul riwayat tidak dikenal.');
+    nilai.push(String(modul)); syarat.push('modul = $' + nilai.length);
+  }
+
+  nilai.push(n);
+  const r = await pool.query(
+    'SELECT * FROM finance_log' +
+    (syarat.length ? ' WHERE ' + syarat.join(' AND ') : '') +
+    ' ORDER BY pada DESC, id DESC LIMIT $' + nilai.length,
+    nilai
+  );
+  return r.rows;
+}
+
+/* ---------- Invoice ---------- */
+
+/**
+ * Nomor invoice otomatis: INV-YYYYMMDD-NNNN, urut per hari.
+ *
+ * Kunci advisory per tanggal (pg_advisory_xact_lock) membuat dua permintaan
+ * yang berjalan bersamaan mengantre, bukan menghasilkan nomor kembar lalu
+ * gagal karena UNIQUE. Kunci otomatis lepas saat COMMIT/ROLLBACK.
+ *
+ * Nomor terbesar dicari dengan CAST, bukan ORDER BY nomor: setelah urutan
+ * melewati 9999, 'INV-...-10000' justru lebih kecil dari '-9999' bila
+ * dibandingkan sebagai teks.
+ */
+async function nomorInvoiceBaru(client) {
+  const awalan = 'INV-' + tanggalHariIni().replace(/-/g, '') + '-';
+  await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['nomor:' + awalan]);
+  const r = await client.query(
+    `SELECT COALESCE(MAX(CAST(SUBSTRING(nomor FROM '[0-9]+$') AS INTEGER)), 0) AS n
+     FROM invoices
+     WHERE nomor LIKE $1 AND nomor ~ '^INV-[0-9]{8}-[0-9]+$'`,
+    [awalan + '%']
+  );
+  const n = Number(r.rows[0].n) + 1;
+  return awalan + String(n).padStart(4, '0');
+}
+
+/**
+ * Hitung ulang uang sebuah invoice dari sumbernya, bukan dari angka yang
+ * dikirim pemanggil:
+ *   subtotal = SUM(invoice_lines.jumlah)
+ *   total    = max(0, subtotal - diskon)
+ *   dibayar  = SUM(payments.jumlah)
+ *
+ * `dibayar` selalu dihitung ulang dari tabel payments supaya tidak mungkin
+ * "lupa" memperbarui kolom ringkasan saat baris tagihan ditambah.
+ */
+async function hitungUlangInvoice(client, invoiceId) {
+  const r = await client.query(
+    `SELECT id, diskon, status,
+            COALESCE((SELECT SUM(jumlah) FROM invoice_lines WHERE invoice_id = $1), 0)::int AS subtotal,
+            COALESCE((SELECT SUM(jumlah) FROM payments WHERE invoice_id = $1), 0)::int AS dibayar
+     FROM invoices WHERE id = $1
+     FOR UPDATE`,
+    [invoiceId]
+  );
+  const row = r.rows[0];
+  if (!row) throw new Error('Invoice tidak ditemukan.');
+
+  const subtotal = Number(row.subtotal);
+  const diskon = Number(row.diskon);
+  const dibayar = Number(row.dibayar);
+  const total = Math.max(0, subtotal - diskon);
+
+  let status;
+  if (row.status === 'batal') status = 'batal';
+  else if (total <= 0 || dibayar >= total) status = 'lunas';
+  else if (dibayar > 0) status = 'sebagian';
+  else status = 'belum';
+
+  await client.query(
+    'UPDATE invoices SET subtotal = $1, total = $2, dibayar = $3, status = $4, diubah = $5 WHERE id = $6',
+    [subtotal, total, dibayar, status, nowISO(), row.id]
+  );
+  return { subtotal, diskon, total, dibayar, status };
+}
+
+/**
+ * Buat invoice manual (tindakan, atau barang yang memang tidak ditarik dari
+ * stok). Pemakaian obat/BMHP sebaiknya lewat confirmUsage() agar stok dan
+ * invoice bergerak bersama.
+ *
+ * Untuk baris yang menyebut itemId, harga SELALU diambil dari items.harga_jual,
+ * bukan dari body. Kalau klien boleh mengirim harga, siapa pun bisa menagih
+ * obat Rp 1 dan aturan "hanya admin boleh mengubah harga" kehilangan arti.
+ */
+async function createInvoice({ patientId, patientNama, visitId, lines, diskon, catatan, oleh } = {}) {
+  await ready();
+  const daftar = (Array.isArray(lines) ? lines : [])
+    .filter(l => l && (l.itemId || String(l.nama || '').trim()));
+  if (!daftar.length) throw new Error('Invoice harus punya minimal satu baris.');
+
+  const org = olehDari(oleh);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const nomor = await nomorInvoiceBaru(client);
+    const id = idBaru('inv_');
+    const pada = nowISO();
+
+    let subtotal = 0;
+    let urut = 1;
+    const baris = [];
+    for (const l of daftar) {
+      const qty = bulat(l.qty === undefined || l.qty === null ? 1 : l.qty, 'Jumlah');
+      if (qty <= 0) throw new Error('Jumlah baris invoice harus lebih dari nol.');
+
+      let jenis, itemId = '', nama = String(l.nama || '').trim();
+      let satuan = String(l.satuan || '').trim();
+      let harga;
+
+      if (l.itemId) {
+        itemId = String(l.itemId);
+        const ir = await client.query('SELECT * FROM items WHERE id = $1', [itemId]);
+        const it = ir.rows[0];
+        if (!it) throw new Error('Barang pada baris invoice tidak ditemukan.');
+        if (Number(it.aktif) !== 1) throw new Error('Barang ' + it.nama + ' sudah nonaktif.');
+        jenis = it.jenis === 'obat' ? 'obat' : 'bmhp';
+        nama = it.nama;
+        satuan = it.satuan;
+        harga = Number(it.harga_jual);
+      } else {
+        jenis = ['tindakan', 'obat', 'bmhp'].indexOf(String(l.jenis)) >= 0
+          ? String(l.jenis) : 'tindakan';
+        if (!nama) throw new Error('Setiap baris invoice harus punya nama atau itemId.');
+        harga = bulat(l.harga === undefined || l.harga === null ? 0 : l.harga, 'Harga');
+        if (harga < 0) throw new Error('Harga tidak boleh negatif.');
+      }
+
+      const jumlah = qty * harga;
+      subtotal += jumlah;
+      baris.push({ jenis, itemId, nama, qty, satuan, harga, jumlah, urut: urut++ });
+    }
+
+    const diskonN = Math.max(0, bulat(diskon === undefined || diskon === null ? 0 : diskon, 'Diskon'));
+    const total = Math.max(0, subtotal - diskonN);
+
+    const inv = await client.query(
+      `INSERT INTO invoices
+         (id, nomor, patient_id, patient_nama, visit_id, tanggal, subtotal, diskon, total, dibayar,
+          status, catatan, oleh_id, oleh_nama, dibuat, diubah)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0, 'belum', $10, $11, $12, $13, $13)
+       RETURNING *`,
+      [id, nomor, patientId ? String(patientId) : '', String(patientNama || '').trim(),
+       visitId ? String(visitId) : '', tanggalHariIni(),
+       subtotal, diskonN, total, String(catatan || ''),
+       org.id, org.nama, pada]
+    );
+
+    for (const b of baris) {
+      await client.query(
+        `INSERT INTO invoice_lines
+           (id, invoice_id, jenis, item_id, nama, qty, satuan, harga, jumlah, urut)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [idBaru('il_'), id, b.jenis, b.itemId, b.nama, b.qty, b.satuan, b.harga, b.jumlah, b.urut]
+      );
+    }
+
+    await catatLog(client, {
+      modul: 'kasir',
+      aksi: 'invoice_buat',
+      refId: id,
+      judul: nomor,
+      detail: 'Total Rp' + total + ' · ' + baris.length + ' baris' +
+        (String(patientNama || '').trim() ? ' · ' + String(patientNama).trim() : ''),
+      oleh: org
+    });
+
+    await client.query('COMMIT');
+    return await getInvoice(inv.rows[0].id);
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+async function getInvoice(id) {
+  await ready();
+  const r = await pool.query('SELECT * FROM invoices WHERE id = $1', [String(id)]);
+  const inv = r.rows[0];
+  if (!inv) return null;
+
+  const l = await pool.query(
+    'SELECT * FROM invoice_lines WHERE invoice_id = $1 ORDER BY urut, id', [inv.id]
+  );
+  const p = await pool.query(
+    'SELECT * FROM payments WHERE invoice_id = $1 ORDER BY tanggal, pada, id', [inv.id]
+  );
+  return Object.assign({}, inv, { lines: l.rows, payments: p.rows });
+}
+
+async function listInvoices({ from, to, status, patientId, limit } = {}) {
+  await ready();
+  const syarat = [];
+  const nilai = [];
+  tambahTanggal(syarat, nilai, 'tanggal', from, to);
+
+  if (status) {
+    if (STATUS_INVOICE.indexOf(String(status)) < 0) throw new Error('Status invoice tidak dikenal.');
+    nilai.push(String(status)); syarat.push('status = $' + nilai.length);
+  }
+  if (patientId) { nilai.push(String(patientId)); syarat.push('patient_id = $' + nilai.length); }
+
+  const n = Math.min(Math.max(parseInt(limit, 10) || 200, 1), 1000);
+  nilai.push(n);
+
+  const r = await pool.query(
+    'SELECT * FROM invoices' +
+    (syarat.length ? ' WHERE ' + syarat.join(' AND ') : '') +
+    ' ORDER BY tanggal DESC, dibuat DESC LIMIT $' + nilai.length,
+    nilai
+  );
+  return r.rows;
+}
+
+/**
+ * Pembayaran masuk. Sisa tagihan dihitung dari invoice yang DIKUNCI
+ * (FOR UPDATE), sehingga dua pembayaran bersamaan tidak bisa sama-sama
+ * lolos validasi "masih ada sisa" lalu membuat dibayar melebihi total.
+ */
+async function addPayment({ invoiceId, tanggal, metode, jumlah, catatan, oleh } = {}) {
+  await ready();
+  const n = bulat(jumlah, 'Jumlah pembayaran');
+  if (n <= 0) throw new Error('Jumlah pembayaran harus lebih dari nol.');
+
+  const mtd = METODE_BAYAR.indexOf(String(metode)) >= 0 ? String(metode) : 'tunai';
+  const org = olehDari(oleh);
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const r = await client.query('SELECT * FROM invoices WHERE id = $1 FOR UPDATE', [String(invoiceId)]);
+    const inv = r.rows[0];
+    if (!inv) throw new Error('Invoice tidak ditemukan.');
+    if (inv.status === 'batal') throw new Error('Invoice sudah dibatalkan, tidak bisa dibayar.');
+
+    const sisa = Number(inv.total) - Number(inv.dibayar);
+    if (n > sisa) {
+      throw new Error('Pembayaran melebihi sisa tagihan (sisa Rp' + sisa + ').');
+    }
+
+    const pada = nowISO();
+    const p = await client.query(
+      `INSERT INTO payments (id, invoice_id, tanggal, metode, jumlah, catatan, oleh_id, oleh_nama, pada)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING *`,
+      [idBaru('pay_'), inv.id, String(tanggal || tanggalHariIni()), mtd, n,
+       String(catatan || ''), org.id, org.nama, pada]
+    );
+
+    const dibayar = Number(inv.dibayar) + n;
+    const lunas = Number(inv.total) <= 0 || dibayar >= Number(inv.total);
+    const status = lunas ? 'lunas' : 'sebagian';
+
+    await client.query(
+      'UPDATE invoices SET dibayar = $1, status = $2, diubah = $3 WHERE id = $4',
+      [dibayar, status, pada, inv.id]
+    );
+
+    await catatLog(client, {
+      modul: 'kasir',
+      aksi: 'bayar',
+      refId: inv.id,
+      judul: inv.nomor,
+      detail: 'Rp' + n + ' via ' + mtd + ' · status ' + status +
+        (inv.patient_nama ? ' · ' + inv.patient_nama : '') +
+        (String(catatan || '').trim() ? ' — ' + String(catatan).trim() : ''),
+      oleh: org
+    });
+
+    await client.query('COMMIT');
+    return {
+      payment: p.rows[0],
+      invoice: Object.assign({}, inv, { dibayar, status, diubah: pada })
+    };
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Ubah status invoice secara administratif (mis. membatalkan tagihan salah
+ * pasien). `dibayar` sengaja TIDAK diubah di sini: uang yang sudah masuk
+ * tetap tercatat di tabel payments dan tetap muncul di laporan pendapatan.
+ * Status 'batal' hanya mengeluarkan tagihan dari daftar piutang/laporan
+ * tagihan, bukan menghapus kuitansi.
+ */
+async function setInvoiceStatus({ id, status, oleh } = {}) {
+  await ready();
+  const st = String(status || '');
+  if (STATUS_INVOICE.indexOf(st) < 0) throw new Error('Status invoice tidak dikenal.');
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const cek = await client.query('SELECT * FROM invoices WHERE id = $1 FOR UPDATE', [String(id)]);
+    const inv = cek.rows[0];
+    if (!inv) throw new Error('Invoice tidak ditemukan.');
+
+    /* Status yang sama tidak perlu dicatat ulang: baris kembar hanya membuat
+       riwayat ramai tanpa menambah informasi. */
+    if (String(inv.status) === st) {
+      await client.query('ROLLBACK');
+      return await getInvoice(String(id));
+    }
+
+    await client.query('UPDATE invoices SET status = $1, diubah = $2 WHERE id = $3',
+      [st, nowISO(), String(id)]);
+
+    await catatLog(client, {
+      modul: 'kasir',
+      aksi: 'invoice_status',
+      refId: inv.id,
+      judul: inv.nomor,
+      detail: 'status ' + inv.status + ' → ' + st +
+        (inv.patient_nama ? ' · ' + inv.patient_nama : ''),
+      oleh
+    });
+
+    await client.query('COMMIT');
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    throw e;
+  } finally {
+    client.release();
+  }
+  return await getInvoice(String(id));
+}
+
+/**
+ * INTI RANTAI BISNIS: catat pemakaian obat/BMHP untuk satu kunjungan.
+ *
+ * Satu transaksi, urutan yang disengaja:
+ *   1. BEGIN
+ *   2. Kunci baris item dengan SELECT ... FOR UPDATE, DIURUTKAN menurut id.
+ *      Urutan tetap mencegah deadlock bila dua kunjungan memakai barang yang
+ *      sama dalam urutan berbeda.
+ *   3. Validasi semua baris lebih dulu (aktif + stok cukup). Tidak ada
+ *      UPDATE sebelum seluruh baris lolos, jadi kegagalan baris ke-3 tidak
+ *      meninggalkan baris ke-1 dan ke-2 sudah terpotong.
+ *   4. Kurangi stok + INSERT stock_moves (jenis 'keluar', stok_akhir).
+ *   5. Cari invoice kunjungan yang belum 'batal'; bila tidak ada, buat baru
+ *      (nomor harian, di dalam transaksi yang sama).
+ *   6. INSERT invoice_lines dengan harga dari items.harga_jual dan nama
+ *      yang disalin saat itu — nota lama tidak boleh berubah saat harga
+ *      master naik.
+ *   7. Hitung ulang subtotal/total/dibayar/status dari tabel sumber.
+ *   8. COMMIT. Galat di langkah mana pun -> ROLLBACK, sehingga stok dan
+ *      invoice tidak pernah terpisah.
+ *
+ * Baris dengan itemId sama digabung lebih dulu: kalau tidak, dua baris
+ * @5 tablet akan diperiksa terhadap stok secara terpisah dan bisa lolos
+ * keduanya walau totalnya melebihi stok.
+ */
+async function confirmUsage({ visitId, patientId, patientNama, lines, oleh } = {}) {
+  await ready();
+  const daftar = (Array.isArray(lines) ? lines : []).filter(l => l && l.itemId);
+  if (!daftar.length) throw new Error('Tidak ada barang yang dipakai.');
+
+  const qtyPerItem = new Map();
+  for (const l of daftar) {
+    const q = bulat(l.qty === undefined || l.qty === null ? 1 : l.qty, 'Jumlah pemakaian');
+    if (q <= 0) throw new Error('Jumlah pemakaian harus lebih dari nol.');
+    const kunci = String(l.itemId);
+    qtyPerItem.set(kunci, (qtyPerItem.get(kunci) || 0) + q);
+  }
+  const ids = Array.from(qtyPerItem.keys()).sort();
+
+  const org = olehDari(oleh);
+  const vid = visitId ? String(visitId) : '';
+  const pid = patientId ? String(patientId) : '';
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    /* Kunci per kunjungan. Tanpa ini, dua permintaan pemakaian yang tiba
+       bersamaan untuk kunjungan yang SAMA bisa sama-sama tidak menemukan
+       invoice lalu membuat dua invoice terpisah. Kunci advisory ini diambil
+       sebelum kunci baris item, dan semua transaksi memakai urutan yang sama,
+       sehingga tidak ada siklus kunci (deadlock). */
+    if (vid) {
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['kunjungan:' + vid]);
+    }
+
+    /* Nama pasien disalin dari tabel pasien (server), bukan dipercaya dari
+       body, supaya nota tidak bisa dibuat atas nama orang lain. */
+    let namaPasien = String(patientNama || '').trim();
+    if (!namaPasien && pid) {
+      const pr = await client.query('SELECT nama FROM patients WHERE id = $1', [pid]);
+      if (pr.rows.length) namaPasien = pr.rows[0].nama;
+    }
+
+    const itemById = {};
+    for (const id of ids) {
+      const r = await client.query('SELECT * FROM items WHERE id = $1 FOR UPDATE', [id]);
+      const it = r.rows[0];
+      if (!it) throw new Error('Barang ' + id + ' tidak ditemukan.');
+      if (Number(it.aktif) !== 1) throw new Error('Barang ' + it.nama + ' sudah nonaktif.');
+
+      const butuh = qtyPerItem.get(id);
+      if (Number(it.stok) < butuh) {
+        throw new Error('Stok ' + it.nama + ' tidak cukup: butuh ' + butuh +
+          ' ' + (it.satuan || '') + ', tersedia ' + it.stok + '.');
+      }
+      itemById[id] = it;
+    }
+
+    /* Invoice lama untuk kunjungan ini dikunci juga: dua permintaan
+       pemakaian pada kunjungan yang sama harus mengantre, bukan menambah
+       baris ke invoice yang sedang dihitung ulang. */
+    let inv = null;
+    if (vid) {
+      const ir = await client.query(
+        `SELECT * FROM invoices
+         WHERE visit_id = $1 AND status <> 'batal'
+         ORDER BY dibuat DESC, id DESC LIMIT 1
+         FOR UPDATE`,
+        [vid]
+      );
+      inv = ir.rows[0] || null;
+    }
+
+    const pada = nowISO();
+    let dibuatBaru = false;
+    if (!inv) {
+      dibuatBaru = true;
+      const nomor = await nomorInvoiceBaru(client);
+      const ins = await client.query(
+        `INSERT INTO invoices
+           (id, nomor, patient_id, patient_nama, visit_id, tanggal, subtotal, diskon, total, dibayar,
+            status, catatan, oleh_id, oleh_nama, dibuat, diubah)
+         VALUES ($1, $2, $3, $4, $5, $6, 0, 0, 0, 0, 'belum', '', $7, $8, $9, $9)
+         RETURNING *`,
+        [idBaru('inv_'), nomor, pid, namaPasien, vid, tanggalHariIni(),
+         org.id, org.nama, pada]
+      );
+      inv = ins.rows[0];
+    }
+
+    const urutRow = await client.query(
+      'SELECT COALESCE(MAX(urut), 0) AS n FROM invoice_lines WHERE invoice_id = $1', [inv.id]
+    );
+    let urut = Number(urutRow.rows[0].n) + 1;
+
+    const moves = [];
+    for (const id of ids) {
+      const it = itemById[id];
+      const qty = qtyPerItem.get(id);
+      const akhir = Number(it.stok) - qty;
+
+      await client.query('UPDATE items SET stok = $1, diubah = $2 WHERE id = $3',
+        [akhir, pada, it.id]);
+
+      const mv = await client.query(
+        `INSERT INTO stock_moves
+           (id, item_id, jenis, jumlah, stok_akhir, alasan, visit_id, patient_id, invoice_id, oleh_id, oleh_nama, pada)
+         VALUES ($1, $2, 'keluar', $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         RETURNING *`,
+        [idBaru('sm_'), it.id, qty, akhir, 'Pemakaian kunjungan',
+         vid || null, pid || null, inv.id, org.id, org.nama, pada]
+      );
+      moves.push(mv.rows[0]);
+
+      await client.query(
+        `INSERT INTO invoice_lines
+           (id, invoice_id, jenis, item_id, nama, qty, satuan, harga, jumlah, urut)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [idBaru('il_'), inv.id, it.jenis === 'obat' ? 'obat' : 'bmhp', it.id,
+         it.nama, qty, it.satuan, Number(it.harga_jual), qty * Number(it.harga_jual), urut++]
+      );
+    }
+
+    await hitungUlangInvoice(client, inv.id);
+
+    /* Dua baris jejak, satu per modul: halaman Persediaan melihat barang apa
+       yang keluar, halaman Kasir melihat tagihan yang terbentuk. Keduanya
+       ditulis dalam transaksi yang sama dengan pengurangan stok. */
+    const ringkasBarang = ids
+      .map(id => itemById[id].nama + ' ×' + qtyPerItem.get(id))
+      .join(', ');
+
+    await catatLog(client, {
+      modul: 'persediaan',
+      aksi: 'pemakaian',
+      refId: inv.id,
+      judul: namaPasien || inv.nomor,
+      detail: ringkasBarang + ' · ' + inv.nomor,
+      oleh: org
+    });
+
+    await catatLog(client, {
+      modul: 'kasir',
+      aksi: dibuatBaru ? 'invoice_buat' : 'invoice_tambah',
+      refId: inv.id,
+      judul: inv.nomor,
+      detail: (dibuatBaru ? 'otomatis dari pemakaian · ' : 'baris ditambahkan · ') +
+        ringkasBarang + (namaPasien ? ' · ' + namaPasien : ''),
+      oleh: org
+    });
+
+    await client.query('COMMIT');
+
+    /* Dibaca ulang SESUDAH commit supaya yang dikembalikan adalah keadaan
+       yang benar-benar tersimpan, termasuk status hasil hitung ulang. */
+    const lengkap = await getInvoice(inv.id);
+    return { invoice: lengkap, moves };
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+/* ---------- Laporan pendapatan ---------- */
+
+/**
+ * Ringkasan pendapatan.
+ *
+ * PENTING: `total` dihitung dari tabel `payments`, bukan dari
+ * `invoices.total`. `total` tagihan adalah uang yang SEHARUSNYA masuk
+ * (akrual); `payments` adalah uang yang BENAR-BENAR masuk (kas). Laporan
+ * pendapatan klinik dipakai untuk mengetahui isi kas dan arus uang, jadi
+ * piutang yang belum dibayar tidak boleh dihitung sebagai pendapatan.
+ * Konsekuensinya: invoice 'lunas' yang dibayar bulan depan masuk ke bulan
+ * pembayaran, bukan bulan tagihan. Invoice 'batal' dikeluarkan dari semua
+ * hitungan.
+ *
+ * Karena itu ada dua cakupan tanggal yang berbeda dan itu disengaja:
+ *   - total, byDay, byMetode, jumlahTransaksi  -> tanggal PEMBAYARAN
+ *   - jumlahInvoice, byJenis, topItems         -> tanggal INVOICE
+ * byJenis/topItems adalah komposisi barang yang tertagih pada periode itu,
+ * bukan komposisi kas. Mencampurnya dengan pembayaran akan membuat satu
+ * obat yang dibayar dua kali angsuran terhitung dua kali.
+ */
+async function revenueSummary({ from, to } = {}) {
+  await ready();
+
+  const sBayar = [];
+  const nBayar = [];
+  tambahTanggal(sBayar, nBayar, 'p.tanggal', from, to);
+  const whereBayar = "i.status <> 'batal'" +
+    (sBayar.length ? ' AND ' + sBayar.join(' AND ') : '');
+
+  const utama = (await pool.query(
+    `SELECT COALESCE(SUM(p.jumlah), 0)::int AS total,
+            COUNT(*)::int AS transaksi
+     FROM payments p JOIN invoices i ON i.id = p.invoice_id
+     WHERE ${whereBayar}`,
+    nBayar
+  )).rows[0];
+
+  const byDay = (await pool.query(
+    `SELECT p.tanggal, COALESCE(SUM(p.jumlah), 0)::int AS total
+     FROM payments p JOIN invoices i ON i.id = p.invoice_id
+     WHERE ${whereBayar}
+     GROUP BY p.tanggal ORDER BY p.tanggal`,
+    nBayar
+  )).rows;
+
+  const byMetode = (await pool.query(
+    `SELECT p.metode, COALESCE(SUM(p.jumlah), 0)::int AS total
+     FROM payments p JOIN invoices i ON i.id = p.invoice_id
+     WHERE ${whereBayar}
+     GROUP BY p.metode ORDER BY total DESC`,
+    nBayar
+  )).rows;
+
+  const sInv = [];
+  const nInv = [];
+  tambahTanggal(sInv, nInv, 'i.tanggal', from, to);
+  const whereInv = "i.status <> 'batal'" +
+    (sInv.length ? ' AND ' + sInv.join(' AND ') : '');
+
+  const jml = (await pool.query(
+    'SELECT COUNT(*)::int AS c FROM invoices i WHERE ' + whereInv, nInv
+  )).rows[0];
+
+  const byJenis = (await pool.query(
+    `SELECT l.jenis, COALESCE(SUM(l.jumlah), 0)::int AS total
+     FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id
+     WHERE ${whereInv}
+     GROUP BY l.jenis ORDER BY total DESC`,
+    nInv
+  )).rows;
+
+  const topItems = (await pool.query(
+    `SELECT l.nama, COALESCE(SUM(l.jumlah), 0)::int AS total,
+            COALESCE(SUM(l.qty), 0)::int AS qty
+     FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id
+     WHERE ${whereInv} AND l.jenis IN ('obat', 'bmhp')
+     GROUP BY l.nama ORDER BY total DESC LIMIT 10`,
+    nInv
+  )).rows;
+
+  return {
+    total: Number(utama.total),
+    jumlahInvoice: Number(jml.c),
+    jumlahTransaksi: Number(utama.transaksi),
+    byDay: byDay.map(r => ({ tanggal: r.tanggal, total: Number(r.total) })),
+    byJenis: byJenis.map(r => ({ jenis: r.jenis, total: Number(r.total) })),
+    byMetode: byMetode.map(r => ({ metode: r.metode, total: Number(r.total) })),
+    topItems: topItems.map(r => ({ nama: r.nama, total: Number(r.total), qty: Number(r.qty) }))
+  };
+}
+
 /* ---------- Statistik ---------- */
 
 async function stats() {
@@ -1038,6 +2202,10 @@ module.exports = {
   photoStats, splitPhotos,
   appendAudit, clearAudit, listAudit, replaceAll,
   recordAccess, listAccess, lastAccess, accessCount,
+  listItems, saveItem, deleteItem,
+  addStockMove, listStockMoves, listFinanceLog,
+  createInvoice, getInvoice, listInvoices, addPayment, setInvoiceStatus, confirmUsage,
+  revenueSummary,
   PERAN_VALID, normalPeran, ensureAdminExists,
-  DEFAULT_USERS
+  DEFAULT_USERS, DEFAULT_ITEMS
 };
