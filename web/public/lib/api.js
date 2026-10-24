@@ -11,6 +11,19 @@ const API = (() => {
 
   function setUnauthorizedHandler(fn) { onUnauthorized = fn; }
 
+  /* Rakit query string untuk endpoint daftar. Kunci yang kosong/null tidak
+     ikut dikirim, supaya server memakai nilai bawaannya — bukan menerima
+     "?jenis=" yang tampak seperti saringan kosong. */
+  function qs(obj) {
+    const p = new URLSearchParams();
+    Object.keys(obj || {}).forEach(k => {
+      const v = obj[k];
+      if (v !== undefined && v !== null && v !== '') p.set(k, v);
+    });
+    const s = p.toString();
+    return s ? '?' + s : '';
+  }
+
   async function request(path, options = {}) {
     const opts = Object.assign({ credentials: 'same-origin', headers: {} }, options);
     /* Body bukan teks dan bukan Blob -> dianggap JSON dan diserialkan.
@@ -105,6 +118,26 @@ const API = (() => {
     deleteUser:   (id)     => request('/api/users?id=' + encodeURIComponent(id), { method: 'DELETE' }),
     setRole:       (id, r)  => request('/api/users/role', { method: 'POST', body: { id, peran: r } }),
     resetPassword: (id, p)  => request('/api/users/reset', { method: 'POST', body: { id, password: p } }),
-    changePassword:(p)      => request('/api/users/password', { method: 'POST', body: p })
+    changePassword:(p)      => request('/api/users/password', { method: 'POST', body: p }),
+
+    /* Persediaan. addStockMove hanya untuk masuk/koreksi; pengeluaran
+       barang WAJIB lewat confirmUsage agar invoice ikut terbentuk. */
+    listItems:     (o = {}) => request('/api/items' + qs(o)),
+    saveItem:      (item)   => request('/api/items', { method: 'POST', body: item }),
+    deleteItem:    (id)     => request('/api/items?id=' + encodeURIComponent(id), { method: 'DELETE' }),
+    listStock:     (o = {}) => request('/api/stock' + qs(o)),
+    addStockMove:  (m)      => request('/api/stock', { method: 'POST', body: m }),
+    confirmUsage:  (u)      => request('/api/usage', { method: 'POST', body: u }),
+
+    /* Keuangan. */
+    listInvoices:  (o = {}) => request('/api/invoices' + qs(o)),
+    getInvoice:    (id)     => request('/api/invoice?id=' + encodeURIComponent(id)),
+    createInvoice: (b)      => request('/api/invoices', { method: 'POST', body: b }),
+    addPayment:    (b)      => request('/api/payments', { method: 'POST', body: b }),
+    setInvoiceStatus: (id, s) => request('/api/invoices/status', {
+      method: 'POST', body: { id, status: s }
+    }),
+    revenue:       (o = {}) => request('/api/revenue' + qs(o)),
+    financeLog:    (o = {}) => request('/api/finance-log' + qs(o))
   };
 })();

@@ -49,6 +49,7 @@ export default function PatientListPage() {
           </div>
         </div>
         <div className="page-head__actions">
+          <button className="btn" onClick={() => nav('/')}>← Dashboard</button>
           <button className="btn" onClick={cetakDaftar} title="Cetak seluruh daftar pasien aktif">Cetak Daftar Pasien</button>
           <button className="btn btn--primary" onClick={() => nav('/pasien-baru')}>+ Tambah Pasien</button>
         </div>

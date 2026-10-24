@@ -2,12 +2,15 @@
    scales.js — Definisi klinis & utilitas skor
    ============================================================
    Arah skor: SEMUA item bernilai 1..5, nilai TINGGI = Luka LEBIH BURUK.
-   Rentang total 13 (sembuh) .. 65 (sangat buruk).
+   Versi final pemilik klinik memakai 10 aspek, sehingga rentang total
+   10 (sembuh) .. 50 (sangat buruk). Tiga aspek lama (tipe & jumlah
+   jaringan nekrotik serta indurasi) sengaja dilepas agar penilaian
+   lebih cepat di bedside dan tidak tumpang tindih dengan aspek lain.
    ============================================================ */
 
 const Scales = (() => {
 
-  /* ---------- 13 parameter WINNER Scale ---------- */
+  /* ---------- 10 aspek WINNER Scale (urutan baku) ---------- */
   const ITEMS = [
     { key: 'size', label: 'Ukuran Luka', en: 'Size',
       anchors: {
@@ -19,7 +22,7 @@ const Scales = (() => {
       } },
     { key: 'depth', label: 'Kedalaman Luka', en: 'Depth',
       anchors: {
-        1: 'Superfisial, hanya dermis',
+        1: 'Stage 1, superfisial (hanya dermis)',
         2: 'Melampaui dermis',
         3: 'Mencapai otot / tendon',
         4: 'Mencapai tulang',
@@ -30,32 +33,16 @@ const Scales = (() => {
         1: 'Tepi baik, tegas, rata',
         2: 'Tepi jelas, sedikit meninggi',
         3: 'Tepi mulai menggantung',
-        4: 'Fibrotik, nyerah ke jaringan',
-        5: 'Terangkat / rolled / everted'
+        4: 'Fibrotik, mengeras ke jaringan sekitar',
+        5: 'Fibrotik / hiperkeratotik, rolled / everted'
       } },
-    { key: 'undermining', label: 'Gua / Undermining', en: 'Undermining',
+    { key: 'undermining', label: 'Gua / Terowongan', en: 'Undermining',
       anchors: {
-        1: 'Tidak ada',
-        2: 'Ringan, < 2 mm',
-        3: 'Sedang, 2 - 6 mm',
-        4: 'Berat, > 6 mm',
-        5: 'Sangat berat, probed hingga mudah'
-      } },
-    { key: 'necType', label: 'Tipe Jaringan Nekrotik', en: 'Necrotic Tissue Type',
-      anchors: {
-        1: 'Tidak ada',
-        2: 'Epidermis',
-        3: 'Lemak subkutan',
-        4: 'Otot',
-        5: 'Tulang / tendon'
-      } },
-    { key: 'necAmount', label: 'Jumlah Jaringan Nekrotik', en: 'Necrotic Amount',
-      anchors: {
-        1: 'Tidak ada, 0%',
-        2: '< 10%',
-        3: '10 - 50%',
-        4: '50 - 90%',
-        5: '> 90%'
+        1: 'Tidak ada goa / terowongan',
+        2: 'Terowongan dangkal, < 2 mm',
+        3: 'Terowongan sedang, 2 - 6 mm',
+        4: 'Terowongan dalam, > 6 mm',
+        5: 'Terowongan luas, menembus fasia'
       } },
     { key: 'exType', label: 'Tipe Eksudat', en: 'Exudate Type',
       anchors: {
@@ -81,21 +68,13 @@ const Scales = (() => {
         4: 'Gelap / kebiruan',
         5: 'Hitam / nekrotik'
       } },
-    { key: 'edema', label: 'Edema Jaringan Sekitar', en: 'Peripheral Edema',
+    { key: 'edema', label: 'Jaringan Edema', en: 'Peripheral Edema',
       anchors: {
         1: 'Tidak ada',
         2: 'Ringan',
         3: 'Sedang',
         4: 'Berat',
-        5: 'Sangat berat, peau d orange'
-      } },
-    { key: 'induration', label: 'Indurasi Jaringan Sekitar', en: 'Peripheral Induration',
-      anchors: {
-        1: 'Tidak ada',
-        2: 'Ringan',
-        3: 'Sedang',
-        4: 'Berat',
-        5: 'Sangat berat, jaringan berbatu'
+        5: 'Sangat berat, peau d\'orange'
       } },
     { key: 'granulation', label: 'Jaringan Granulasi', en: 'Granulation Tissue',
       anchors: {
@@ -115,17 +94,44 @@ const Scales = (() => {
       } }
   ];
 
-  /* ---------- Band keparahan ---------- */
+  /* ---------- Band keparahan ----------
+     Batas lama (13..65, span 52) dipotong di 24, 38, dan 52. Jarak tiap
+     potongan dari titik terendah adalah 11, 25, dan 39 — yaitu fraksi
+     11/52, 25/52, dan 39/52 dari seluruh rentang. Agar arti band tetap
+     sama setelah rentang menyusut menjadi 10..50 (span 40), fraksi yang
+     sama diterapkan ke span baru: 10 + 11/52*40 = 18,5 -> 18;
+     10 + 25/52*40 = 19,2 -> 19; 10 + 39/52*40 = 40,0 -> 40. Karena itu
+     batasnya menjadi 10 | 11-18 | 19-29 | 30-40 | 41-50. Angka-angka ini
+     bukan angka sakti, melainkan hasil pembulatan fraksi di atas. */
   const BANDS = [
-    { min: 13, max: 13, label: 'Sembuh / Epitelisasi Lengkap',            short: 'Sembuh',        tone: 'ok' },
-    { min: 14, max: 24, label: 'Sangat Ringan, intervensi minimal',        short: 'Sangat Ringan', tone: 'ok' },
-    { min: 25, max: 38, label: 'Ringan - Sedang, terapi aktif berkelanjutan', short: 'Ringan - Sedang', tone: 'info' },
-    { min: 39, max: 52, label: 'Sedang - Berat, pemantauan intensif',       short: 'Sedang - Berat', tone: 'warn' },
-    { min: 53, max: 65, label: 'Sangat Buruk,tenance kompleks / rujuk',   short: 'Sangat Buruk',  tone: 'danger' }
+    { min: 10, max: 10, label: 'Sembuh / Epitelisasi Lengkap',            short: 'Sembuh',        tone: 'ok' },
+    { min: 11, max: 18, label: 'Sangat Ringan, intervensi minimal',        short: 'Sangat Ringan', tone: 'ok' },
+    { min: 19, max: 29, label: 'Ringan - Sedang, terapi aktif berkelanjutan', short: 'Ringan - Sedang', tone: 'info' },
+    { min: 30, max: 40, label: 'Sedang - Berat, pemantauan intensif',       short: 'Sedang - Berat', tone: 'warn' },
+    { min: 41, max: 50, label: 'Sangat Buruk, tata laksana kompleks / rujuk', short: 'Sangat Buruk',  tone: 'danger' }
   ];
 
-  const MIN_TOTAL = 13;
-  const MAX_TOTAL = 65;
+  const MIN_TOTAL = 10;
+  const MAX_TOTAL = 50;
+
+  /* ---------- Perkiraan penyembuhan ----------
+     Estimasi edukatif dari pemilik klinik: total skor dikali 12 lalu
+     dibagi 55. Pembilang dan penyebut sengaja dinamai supaya bila
+     pemilik klinik mengubah rasio, cukup satu tempat yang disentuh.
+     Pembagian 55 (bukan 50) adalah koreksi final; jangan "rapikan"
+     menjadi 50 hanya karena rentang totalnya 10..50. */
+  const HEALING_NUMERATOR = 12;
+  const HEALING_DIVISOR = 55;
+
+  /**
+   * Perkiraan lama penyembuhan dalam minggu (satu desimal).
+   * Ini ESTIMASI EDUKATIF, bukan prognosis medis dan tidak boleh
+   * dipakai sebagai janji kepada pasien.
+   */
+  function healingWeeks(total) {
+    if (total == null) return null;
+    return Math.round((total * HEALING_NUMERATOR / HEALING_DIVISOR) * 10) / 10;
+  }
 
   /* ---------- Hitung total ---------- */
   function total(scores) {
@@ -212,7 +218,8 @@ const Scales = (() => {
 
   return {
     ITEMS, BANDS, MIN_TOTAL, MAX_TOTAL, TISSUE_KEYS,
-    total, band, delta, trend, areaCm2,
+    HEALING_NUMERATOR, HEALING_DIVISOR,
+    total, band, delta, trend, areaCm2, healingWeeks,
     tissueSum, normalizeTissue, worstItems
   };
 })();

@@ -90,7 +90,7 @@ export default function NewPatientPage() {
           <p className="page-head__sub">Data dasar pasien. Kunjungan pertama dibuat setelah ini.</p>
         </div>
         <div className="page-head__actions">
-          <button className="btn" onClick={() => nav('/')}>← Kembali</button>
+          <button className="btn" onClick={() => nav('/pasien')}>← Kembali</button>
         </div>
       </div>
 
@@ -160,7 +160,7 @@ export default function NewPatientPage() {
 
       <div className="btn-group">
         <button className="btn btn--primary" onClick={simpan}>Simpan</button>
-        <button className="btn" onClick={() => nav('/')}>Batal</button>
+        <button className="btn" onClick={() => nav('/pasien')}>Batal</button>
       </div>
     </main>
   );

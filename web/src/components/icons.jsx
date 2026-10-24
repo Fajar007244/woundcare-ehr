@@ -86,6 +86,45 @@ const GLYPHS = {
     <polyline points="4.5 12.5 9.5 17.5 19.5 7" />
   ),
 
+  /* --- Persediaan & keuangan --- */
+
+  // Persediaan obat & BMHP — kotak/krat. Dipakai di menu dan judul
+  // halaman Persediaan.
+  box: (
+    <>
+      <path d="M12 2.8 21 7.4v9.2L12 21.2 3 16.6V7.4z" />
+      <path d="M3 7.4l9 4.6 9-4.6" />
+      <path d="M12 12v9.2" />
+    </>
+  ),
+
+  // Invoice — kertas tagihan bergerigi di bawah.
+  receipt: (
+    <>
+      <path d="M6 2.8h12v18.4l-3-1.6-3 1.6-3-1.6-3 1.6z" />
+      <line x1="9" y1="7.5" x2="15" y2="7.5" />
+      <line x1="9" y1="11.5" x2="15" y2="11.5" />
+    </>
+  ),
+
+  // Omset / pembayaran — dompet.
+  wallet: (
+    <>
+      <rect x="3" y="6" width="18" height="13" rx="2.5" />
+      <path d="M3 9.5h18" />
+      <circle cx="16.8" cy="14.2" r="1.3" />
+    </>
+  ),
+
+  // Stok di bawah batas minimum — segitiga peringatan.
+  alert: (
+    <>
+      <path d="M12 3.5 21.5 20H2.5z" />
+      <line x1="12" y1="9.5" x2="12" y2="14" />
+      <circle cx="12" cy="16.9" r=".7" />
+    </>
+  ),
+
   /* --- Menu akun --- */
 
   // Ganti Sandi. Versi pertama punya pusat tinta di (12.5, 11.5),

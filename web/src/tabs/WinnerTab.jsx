@@ -59,6 +59,16 @@ const WARNA_BAND = {
   danger: 'var(--c-danger)'
 };
 
+/*
+ * Lima penanda angka pada bilah total. Dulu deretnya ditulis manual
+ * mengikuti skala lama, yang akan langsung salah begitu jumlah aspek
+ * berubah. Sekarang diturunkan dari MIN_TOTAL/MAX_TOTAL sehingga
+ * penanda selalu membagi rentang penuh menjadi empat bagian sama panjang.
+ */
+const TICKS_TOTAL = Array.from({ length: 5 }, (_, i) =>
+  Math.round(Scales.MIN_TOTAL + ((Scales.MAX_TOTAL - Scales.MIN_TOTAL) * i) / 4)
+);
+
 /* ==========================================================
    Tooltip jangkar penilaian
    ========================================================== */
@@ -221,7 +231,7 @@ function PanelTotal({ hasil, beku, onReset, onIsiOtomatis, onRiwayat }) {
           ></div>
         </div>
         <div className="winner-total__ticks">
-          <span>13</span><span>26</span><span>39</span><span>52</span><span>65</span>
+          {TICKS_TOTAL.map((n, i) => <span key={i}>{n}</span>)}
         </div>
         <div className="winner-progress">
           <div
@@ -232,6 +242,25 @@ function PanelTotal({ hasil, beku, onReset, onIsiOtomatis, onRiwayat }) {
               background: filled === Scales.ITEMS.length ? 'var(--c-ok)' : 'var(--c-primary)'
             }}
           ></div>
+        </div>
+
+        {/*
+          Perkiraan lama penyembuhan. Ini ESTIMASI EDUKATIF dari pemilik
+          klinik, bukan prognosis atau janji medis — karena itu labelnya
+          selalu "perkiraan" dan rumusnya ikut ditulis kecil agar angka
+          tidak tampak seperti kepastian.
+        */}
+        <div id="winner-healing" style={{ fontSize: 12, color: 'var(--c-text-muted)', lineHeight: 1.45 }}>
+          {total === null ? (
+            <>Perkiraan penyembuhan: —</>
+          ) : (
+            <>
+              Perkiraan penyembuhan: <b style={{ color: 'var(--c-text)' }}>{Scales.healingWeeks(total)} minggu</b>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+                (total × {Scales.HEALING_NUMERATOR}) ÷ {Scales.HEALING_DIVISOR}
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -557,19 +586,7 @@ function IsiWinner({ patient, visit, rev, setRev }) {
       : !isFinite(udDepth) ? 3
       : udDepth < 0.2 ? 2 : udDepth < 0.6 ? 3 : udDepth <= 1 ? 4 : 5;
 
-    // 5. Tipe jaringan nekrotik — dari lokasi + ada/tidaknya slough
-    const pct = k => Number(w.jaringan && w.jaringan[k]) || 0;
-    const nec = pct('nekrotik'), slo = pct('slough');
-    s.necType = (nec === 0 && slo === 0) ? 1
-      : w.iskemia && String(w.iskemia).startsWith('Ya') ? 5
-      : slo > 20 ? 3
-      : slo > 0 ? 2 : 1;
-
-    // 6. Jumlah nekrotik (nekrotik + slough)
-    const dead = nec + slo;
-    s.necAmount = dead === 0 ? 1 : dead < 10 ? 2 : dead < 50 ? 3 : dead < 90 ? 4 : 5;
-
-    // 7. Tipe eksudat
+    // 5. Tipe eksudat
     const exTipe = w.eksudat && w.eksudat.tipe;
     s.exType = !exTipe || w.eksudat.jumlah === 'Tidak Ada' ? 1
       : exTipe === 'Serous' ? 2
@@ -577,25 +594,23 @@ function IsiWinner({ patient, visit, rev, setRev }) {
       : exTipe === 'Sanguinous' ? 4
       : exTipe === 'Purulent' ? 5 : null;
 
-    // 8. Jumlah eksudat
+    // 6. Jumlah eksudat
     const exJ = w.eksudat && w.eksudat.jumlah;
     s.exAmount = !exJ || exJ === 'Tidak Ada' ? 1 : exJ === 'Sedikit' ? 2 : exJ === 'Sedang' ? 3 : 4;
 
-    // 9. Warna kulit sekitar
+    // 7. Warna kulit sekitar
     const time = w.time || [];
     s.skinColor = time.includes('Rubor') ? 3 : time.includes('Functio Laesa') ? 5 : 2;
 
-    // 10. Edema — tidak diukur langsung, default paling ringan yang tersedia
+    // 8. Edema — tidak diukur langsung, default paling ringan yang tersedia
     s.edema = null;
 
-    // 11. Indurasi
-    s.induration = null;
-
-    // 12. Granulasi
+    // 9. Granulasi
+    const pct = k => Number(w.jaringan && w.jaringan[k]) || 0;
     const gran = pct('granulasi');
     s.granulation = gran >= 100 ? 1 : gran > 75 ? 2 : gran >= 50 ? 3 : gran > 0 ? 4 : 5;
 
-    // 13. Epitelisasi
+    // 10. Epitelisasi
     const epi = pct('epitel');
     s.epithelial = epi >= 100 ? 1 : epi > 75 ? 2 : epi >= 50 ? 3 : epi > 0 ? 4 : 5;
 
@@ -635,14 +650,14 @@ function IsiWinner({ patient, visit, rev, setRev }) {
         <div className="card__head">
           <span className="num">5</span>
           <h2>WINNER Wound Assessment Scale</h2>
-          <Badge tone="primary">13 parameter · skor 1–5</Badge>
+          <Badge tone="primary">{Scales.ITEMS.length} parameter · skor 1–5</Badge>
         </div>
         <div className="card__body">
           <Callout>
             <strong>Cara mengisi</strong>
             Setiap parameter dinilai 1–5. <b>Skor tinggi = kondisi luka lebih buruk.</b>{' '}
             Arahkan kursor ke tanda <b>?</b> atau pilihan angka untuk melihat jangkar penilaian.{' '}
-            Total minimum 13 (sembuh) dan maksimum 65 (sangat buruk).
+            Total minimum {Scales.MIN_TOTAL} (sembuh) dan maksimum {Scales.MAX_TOTAL} (sangat buruk).
           </Callout>
         </div>
 

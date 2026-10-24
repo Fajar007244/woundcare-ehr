@@ -1096,8 +1096,8 @@ function KartuTentang() {
       <div className="card__head"><span className="num">vi</span><h2>Tentang Aplikasi</h2></div>
       <div className="card__body" style={{ fontSize: 13, color: 'var(--c-text-muted)' }}>
         <p><b>WoundCare EHR</b> — formulir rekam medis &amp; manajemen klinis perawatan luka modern.</p>
-        <p>Skala yang digunakan: <b>WINNER Wound Assessment Scale</b> &mdash; 13 parameter, skor 1&ndash;5, total 13&ndash;65.
-          Skor 13 menunjukkan epitelisasi lengkap (sembuh), skor 65 menunjukkan kondisi sangat buruk.
+        <p>Skala yang digunakan: <b>WINNER Wound Assessment Scale</b> &mdash; {Scales.ITEMS.length} parameter, skor 1&ndash;5, total {Scales.MIN_TOTAL}&ndash;{Scales.MAX_TOTAL}.
+          Skor {Scales.MIN_TOTAL} menunjukkan epitelisasi lengkap (sembuh), skor {Scales.MAX_TOTAL} menunjukkan kondisi sangat buruk.
           Jangkar penilaian mengikuti praktik wound severity scoring yang lazim dipakai
           (Danger Foot Score, Sussman&ndash;Culp), dan <b>dapat disesuaikan</b> oleh institusi Anda
           di <code>assets/js/scales.js</code>.</p>
@@ -1120,7 +1120,7 @@ export default function SettingsPage() {
   const [sibuk, setSibuk] = useState(false);
 
   /* Setelah data besar berubah (pulihkan cadangan / hapus semua), kembali ke daftar. */
-  function setelahPerubahanData() { nav('/'); }
+  function setelahPerubahanData() { nav('/pasien'); }
 
   /* wire(): svClinic.addEventListener('click', ...) */
   async function simpanKlinik(nilai) {
@@ -1164,7 +1164,7 @@ export default function SettingsPage() {
           perubahan di halaman ini.
         </div>
         <div className="btn-group" style={{ marginTop: 14 }}>
-          <button className="btn" onClick={() => nav('/')}>← Kembali ke Daftar Pasien</button>
+          <button className="btn" onClick={() => nav('/pasien')}>← Kembali ke Daftar Pasien</button>
         </div>
       </main>
     );
@@ -1184,7 +1184,7 @@ export default function SettingsPage() {
           </div>
         </div>
         <div className="page-head__actions">
-          <button className="btn" onClick={() => nav('/')}>← Kembali</button>
+          <button className="btn" onClick={() => nav('/pasien')}>← Kembali</button>
         </div>
       </div>
 

@@ -435,6 +435,152 @@ const routes = {
     json(res, 200, { last: await db.lastAccess(q.get('patientId') || '') });
   },
 
+  /* --- Persediaan: obat & BMHP ---
+   *
+   * Kewenangan:
+   *   - membaca barang & stok: semua petugas yang sudah masuk
+   *   - menambah/mengubah/menonaktifkan barang dan HARGA: admin saja.
+   *     Harga jual di sini adalah sumber harga pada invoice; kalau semua
+   *     peran boleh mengubahnya, siapa pun bisa mengubah pendapatan klinik
+   *     tanpa jejak.
+   *   - mencatat pemakaian: semua petugas, karena perawat di ruang tindakan
+   *     yang tahu barang apa yang benar-benar dipakai.
+   */
+  'GET /api/items': async (req, res, q) => {
+    const u = await currentUser(req); if (!u) return json(res, 401, { error: 'Belum masuk.' });
+    json(res, 200, {
+      items: await db.listItems({ jenis: q.get('jenis') || '', aktif: q.get('aktif') })
+    });
+  },
+
+  'POST /api/items': async (req, res) => {
+    const u = await requireAdmin(req, res); if (!u) return;
+    const b = await readBody(req);
+    try { json(res, 200, { item: await db.saveItem(Object.assign({}, b, { oleh: u })) }); }
+    catch (e) { json(res, 400, { error: e.message }); }
+  },
+
+  /* Nonaktifkan, bukan hapus: riwayat stok harus tetap bisa diaudit. */
+  'DELETE /api/items': async (req, res, q) => {
+    const u = await requireAdmin(req, res); if (!u) return;
+    try { json(res, 200, { ok: true, item: await db.deleteItem(String(q.get('id') || ''), u) }); }
+    catch (e) { json(res, 400, { error: e.message }); }
+  },
+
+  'GET /api/stock': async (req, res, q) => {
+    const u = await currentUser(req); if (!u) return json(res, 401, { error: 'Belum masuk.' });
+    json(res, 200, {
+      moves: await db.listStockMoves({
+        itemId: q.get('itemId') || '',
+        limit: q.get('limit') || 100
+      })
+    });
+  },
+
+  /* Penerimaan & koreksi stok mengubah master persediaan, jadi admin.
+     Pengeluaran TIDAK lewat sini: ia harus melalui /api/usage supaya satu
+     transaksi sekaligus mengurangi stok DAN membuat baris invoice. Kalau
+     stok boleh dikurangi langsung, obat bisa keluar tanpa pernah ditagih. */
+  'POST /api/stock': async (req, res) => {
+    const u = await requireAdmin(req, res); if (!u) return;
+    const b = await readBody(req);
+    if (b && b.jenis === 'keluar') {
+      return json(res, 400, {
+        error: 'Pengeluaran stok dicatat lewat /api/usage agar invoice ikut terbentuk.'
+      });
+    }
+    try { json(res, 200, await db.addStockMove(Object.assign({}, b, { oleh: u }))); }
+    catch (e) { json(res, 400, { error: e.message }); }
+  },
+
+  /* Pemakaian untuk satu kunjungan: stok turun + invoice bertambah + status
+     dihitung ulang, semuanya dalam satu transaksi di db.confirmUsage(). */
+  'POST /api/usage': async (req, res) => {
+    const u = await currentUser(req); if (!u) return json(res, 401, { error: 'Belum masuk.' });
+    const b = (await readBody(req)) || {};
+    if (!b.visitId) return json(res, 400, { error: 'Kunjungan tidak disebutkan.' });
+    try { json(res, 200, await db.confirmUsage(Object.assign({}, b, { oleh: u }))); }
+    catch (e) { json(res, 400, { error: e.message }); }
+  },
+
+  /* --- Keuangan: invoice, pembayaran, laporan ---
+   *
+   * Mencatat tagihan dan menerima pembayaran terbuka untuk semua petugas
+   * yang sudah masuk — kasir dan perawat memang perlu melakukannya.
+   * Membatalkan/mengubah status invoice adalah kontrol keuangan, jadi admin:
+   * tanpa batas itu, tagihan yang sudah tercatat bisa "dihilangkan" dari
+   * laporan oleh siapa pun yang memegang sesi.
+   */
+  'GET /api/invoices': async (req, res, q) => {
+    const u = await currentUser(req); if (!u) return json(res, 401, { error: 'Belum masuk.' });
+    try {
+      json(res, 200, {
+        invoices: await db.listInvoices({
+          from: q.get('from') || '',
+          to: q.get('to') || '',
+          status: q.get('status') || '',
+          patientId: q.get('patientId') || '',
+          limit: q.get('limit') || 200
+        })
+      });
+    } catch (e) { json(res, 400, { error: e.message }); }
+  },
+
+  'GET /api/invoice': async (req, res, q) => {
+    const u = await currentUser(req); if (!u) return json(res, 401, { error: 'Belum masuk.' });
+    const inv = await db.getInvoice(String(q.get('id') || ''));
+    if (!inv) return json(res, 404, { error: 'Invoice tidak ditemukan.' });
+    json(res, 200, { invoice: inv });
+  },
+
+  'POST /api/invoices': async (req, res) => {
+    const u = await currentUser(req); if (!u) return json(res, 401, { error: 'Belum masuk.' });
+    const b = (await readBody(req)) || {};
+    try {
+      json(res, 200, { invoice: await db.createInvoice(Object.assign({}, b, { oleh: u })) });
+    } catch (e) { json(res, 400, { error: e.message }); }
+  },
+
+  'POST /api/payments': async (req, res) => {
+    const u = await currentUser(req); if (!u) return json(res, 401, { error: 'Belum masuk.' });
+    const b = (await readBody(req)) || {};
+    try {
+      json(res, 200, await db.addPayment(Object.assign({}, b, { oleh: u })));
+    } catch (e) { json(res, 400, { error: e.message }); }
+  },
+
+  'POST /api/invoices/status': async (req, res) => {
+    const u = await requireAdmin(req, res); if (!u) return;
+    const b = (await readBody(req)) || {};
+    try {
+      json(res, 200, { invoice: await db.setInvoiceStatus({ id: b.id, status: b.status, oleh: u }) });
+    } catch (e) { json(res, 400, { error: e.message }); }
+  },
+
+  'GET /api/revenue': async (req, res, q) => {
+    const u = await currentUser(req); if (!u) return json(res, 401, { error: 'Belum masuk.' });
+    json(res, 200, await db.revenueSummary({
+      from: q.get('from') || '',
+      to: q.get('to') || ''
+    }));
+  },
+
+  /* Riwayat perubahan persediaan & kasir — admin saja.
+     Isinya menyebut siapa mengubah harga, siapa menerima uang, dan siapa
+     membatalkan tagihan. Itu kontrol keuangan, bukan bacaan umum, jadi
+     dibatasi sama seperti /api/access. */
+  'GET /api/finance-log': async (req, res, q) => {
+    if (!await requireAdmin(req, res)) return;
+    try {
+      json(res, 200, {
+        log: await db.listFinanceLog({
+          modul: q.get('modul') || '',
+          limit: q.get('limit') || 200
+        })
+      });
+    } catch (e) { json(res, 400, { error: e.message }); }
+  },
+
   /* --- Cadangan .zip: manifest + foto, DIALIRKAN ---
    *
    * Ini jalur cadangan yang benar untuk data skala nyata.

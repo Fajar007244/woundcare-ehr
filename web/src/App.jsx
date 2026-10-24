@@ -26,6 +26,10 @@ import { openAuditHistory, openAccessLog } from './core/overlays.jsx';
 import PatientListPage from './routes/PatientListPage.jsx';
 import NewPatientPage from './routes/NewPatientPage.jsx';
 import SettingsPage from './routes/SettingsPage.jsx';
+import BillingPage from './routes/BillingPage.jsx';
+import InventoryPage from './routes/InventoryPage.jsx';
+import RevenuePage from './routes/RevenuePage.jsx';
+import DashboardPage from './routes/DashboardPage.jsx';
 
 /* ---------------- Chrome ---------------- */
 
@@ -34,20 +38,21 @@ import SettingsPage from './routes/SettingsPage.jsx';
    hasilnya gambar rusak di semua tab formulir, tapi masih baik di
    halaman daftar. */
 function Brand({ clinic }) {
+  const nav = useNavigate();
   return (
-    <div className="brand">
+    <button type="button" className="brand brand--home" onClick={() => nav('/')} title="Ke dashboard">
       <div className="brand__logo">
         <img src="/assets/images/logo.png" alt="Logo Lukumu Lukaku Cimahi" />
       </div>
       {/* Wrapper ini WAJIB memakai kelas brand__text — CSS sudah
           menyerobotnya (min-width:0, flex:1 1 auto) untuk membuat
           teks memotong dengan elipsis, bukan memanjangkan navbar.
-          Tanpa kelas, judul klinik menabrak tombol Pengaturan. */}
+          Tanpa kelas, judul klinik menabrak chip akun. */}
       <div className="brand__text">
         <div className="brand__title">{clinic.nama || 'WoundCare EHR'}</div>
         <div className="brand__sub">Rekam Medis &amp; Manajemen Klinis Perawatan Luka Modern</div>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -125,9 +130,15 @@ function UserMenu({ user, unsynced, onLogout }) {
           <button className="user-menu__item" onClick={() => { setBuka(false); gantiSandi(); }}>
             <Icon name="key" className="user-menu__ico" /> Ganti Sandi
           </button>
-          <button className="user-menu__item" onClick={() => { setBuka(false); nav('/pengaturan'); }}>
-            <Icon name="clock" className="user-menu__ico" /> Riwayat Akses Klinik
-          </button>
+          {/* Riwayat akses hanya bermakna bagi admin: server menolak peran
+              lain (openAccessLog & /api/access), dan halaman tujuannya pun
+              dikunci. Tanpa syarat ini, petugas melihat menu yang pasti
+              berujung penolakan. */}
+          {admin ? (
+            <button className="user-menu__item" onClick={() => { setBuka(false); nav('/pengaturan'); }}>
+              <Icon name="clock" className="user-menu__ico" /> Riwayat Akses Klinik
+            </button>
+          ) : null}
           {admin ? (
             <button className="user-menu__item" onClick={() => { setBuka(false); nav('/pengaturan'); }}>
               <Icon name="database" className="user-menu__ico" /> Data &amp; Cadangan
@@ -145,7 +156,6 @@ function UserMenu({ user, unsynced, onLogout }) {
 
 function Header() {
   const { clinic, user, unsynced, logout } = useData();
-  const nav = useNavigate();
 
   useEffect(() => {
     const tutup = () => document.querySelector('.user-menu-wrap > .user-chip')?.classList.remove('is-open');
@@ -166,14 +176,6 @@ function Header() {
          routes/PatientListPage.jsx), tepat di bawah judul. Satu tempat,
          semua perangkat, tidak pernah ada dobel. */}
       <div className="app-header__spacer"></div>
-      {user && user.peran === 'Admin' ? (
-        /* Label dipisah agar bisa disembunyikan sendiri di ponsel (hanya
-           ikon), sementara di layar lebar tetap tertulis penuh. Title
-           tetap ada, jadi pembaca layar tetap tahu ini tombol apa. */
-        <button className="btn btn--ghost" onClick={() => nav('/pengaturan')} title="Pengaturan &amp; cadangan data">
-          ⚙<span className="btn__label"> Pengaturan</span>
-        </button>
-      ) : null}
       <UserMenu user={user} unsynced={unsynced} onLogout={logout} />
     </header>
   );
@@ -325,7 +327,7 @@ function PatientPage() {
       <main className="view">
         <div className="empty-state">
           <h3>Pasien tidak ditemukan</h3>
-          <button className="btn" onClick={() => nav('/')}>← Kembali ke daftar</button>
+          <button className="btn" onClick={() => nav('/pasien')}>← Kembali ke daftar</button>
         </div>
       </main>
     );
@@ -398,7 +400,7 @@ function PatientPage() {
       <PatientBar
         patient={patient}
         visit={visit}
-        onBack={() => nav('/')}
+        onBack={() => nav('/pasien')}
         onNewVisit={tambahKunjungan}
         onOpenAccessLog={bukaAkses}
       />
@@ -524,11 +526,15 @@ export default function App() {
     <>
       <Header />
       <Routes>
-        <Route path="/" element={<PatientListPage />} />
+        <Route path="/" element={<DashboardPage />} />
+        <Route path="/pasien" element={<PatientListPage />} />
         <Route path="/pasien-baru" element={<NewPatientPage />} />
         <Route path="/p/:patientId" element={<PatientPage />} />
         <Route path="/pengaturan" element={<SettingsPage />} />
-        <Route path="*" element={<PatientListPage />} />
+        <Route path="/kasir" element={<BillingPage />} />
+        <Route path="/persediaan" element={<InventoryPage />} />
+        <Route path="/omset" element={<RevenuePage />} />
+        <Route path="*" element={<DashboardPage />} />
       </Routes>
     </>
   );

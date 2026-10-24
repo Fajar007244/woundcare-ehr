@@ -152,3 +152,88 @@ export function openAccessLog(patient) {
 
   return m;
 }
+
+/* ---------------- Riwayat persediaan & kasir ---------------- */
+
+/* Aksi yang ditulis db.js ke finance_log. Tone badge mengikuti warna yang
+   sudah dipakai di seluruh aplikasi, bukan warna baru. */
+const LABEL_LOG = {
+  barang_baru:     { label: 'Barang baru',     tone: 'ok' },
+  barang_ubah:     { label: 'Barang diubah',   tone: 'warn' },
+  barang_nonaktif: { label: 'Dinonaktifkan',   tone: 'muted' },
+  stok_masuk:      { label: 'Stok masuk',      tone: 'ok' },
+  stok_koreksi:    { label: 'Koreksi stok',    tone: 'warn' },
+  stok_keluar:     { label: 'Stok keluar',     tone: 'info' },
+  pemakaian:       { label: 'Pemakaian',       tone: 'info' },
+  invoice_buat:    { label: 'Invoice dibuat',  tone: 'ok' },
+  invoice_tambah:  { label: 'Baris ditambah',  tone: 'info' },
+  bayar:           { label: 'Pembayaran',      tone: 'ok' },
+  invoice_status:  { label: 'Status invoice',  tone: 'warn' }
+};
+
+/**
+ * Riwayat perubahan satu modul ('persediaan' | 'kasir').
+ *
+ * Hanya admin — dicek di sini DAN di server. Data diambil ulang dari server
+ * setiap kali dibuka, bukan dari Store: tombol ini dipakai untuk memeriksa
+ * perubahan yang dilakukan petugas lain, jadi salinan lokal justru
+ * menyesatkan.
+ */
+export function openFinanceLog(modul) {
+  const u = Store.user;
+  if (!u || u.peran !== 'Admin') {
+    UI.toast('Riwayat ini hanya dapat dilihat admin.', 'warn');
+    return;
+  }
+
+  const kasir = modul === 'kasir';
+  const box = document.createElement('div');
+  box.innerHTML = '<div class="field__hint">Memuat…</div>';
+
+  const m = UI.modal({
+    title: kasir ? 'Riwayat Kasir & Invoice' : 'Riwayat Persediaan',
+    wide: true,
+    body: box,
+    footer: [UI.el('button', { class: 'btn btn--primary', text: 'Tutup', onclick: () => m.close() })]
+  });
+
+  API.financeLog({ modul, limit: 300 })
+    .then(d => {
+      const rows = (d && d.log) || [];
+      if (!rows.length) {
+        box.innerHTML = `<div class="callout"><strong>Belum ada perubahan tercatat</strong>
+          ${kasir
+            ? 'Setiap invoice dibuat, pembayaran diterima, dan tagihan dibatalkan akan tercatat di sini lengkap dengan petugas dan waktunya.'
+            : 'Setiap barang ditambah, harga diubah, dan stok bergerak akan tercatat di sini lengkap dengan petugas dan waktunya.'}</div>`;
+        return;
+      }
+
+      box.innerHTML = `
+        <div class="table-wrap">
+          <table class="data">
+            <thead><tr>
+              <th style="width:132px">Waktu</th>
+              <th style="width:120px">Perubahan</th>
+              <th>${kasir ? 'Invoice / Pasien' : 'Barang'}</th>
+              <th>Rincian</th>
+              <th style="width:118px">Petugas</th>
+            </tr></thead>
+            <tbody>${rows.map(r => {
+              const a = LABEL_LOG[r.aksi] || { label: r.aksi || '—', tone: 'muted' };
+              return `<tr>
+                <td style="font-size:12px;white-space:nowrap">${esc(UI.fmtDateTime(String(r.pada).slice(0, 10), String(r.pada).slice(11, 16)))}</td>
+                <td><span class="badge badge--${a.tone}">${esc(a.label)}</span></td>
+                <td style="font-weight:600;font-size:12.5px">${esc(r.judul || '—')}</td>
+                <td style="font-size:12px;color:var(--c-text-muted)">${esc(potong(r.detail, 160) || '—')}</td>
+                <td style="font-size:12px">${esc(r.oleh_nama || '—')}</td>
+              </tr>`;
+            }).join('')}</tbody>
+          </table>
+        </div>`;
+    })
+    .catch(e => {
+      box.innerHTML = `<div class="callout callout--danger"><strong>Gagal memuat</strong>${esc(e.message)}</div>`;
+    });
+
+  return m;
+}

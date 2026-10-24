@@ -1,0 +1,143 @@
+﻿/* Billing & revenue shared styles */
+
+.bill-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.bill-toolbar .search-inline { flex: 1 1 220px; margin-bottom: 0; }
+.bill-toolbar .search-inline input { width: 100%; }
+
+.bill-status-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.bill-tab {
+  padding: 6px 12px;
+  border: 1px solid var(--c-border);
+  border-radius: 999px;
+  background: var(--c-surface);
+  font-size: 13px;
+  cursor: pointer;
+}
+.bill-tab.is-active {
+  background: var(--c-primary-soft);
+  border-color: var(--c-primary);
+  color: var(--c-primary);
+  font-weight: 600;
+}
+
+.bill-cards { display: none; }
+.bill-card {
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+.bill-card__head { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.bill-card__title { font-weight: 650; font-size: 14px; }
+.bill-card__meta { font-size: 11.5px; color: var(--c-text-muted); font-family: var(--font-mono); }
+.bill-card__row { display: flex; justify-content: space-between; font-size: 12.5px; padding: 2px 0; }
+.bill-card__row b { font-weight: 600; }
+
+/* invoice detail */
+.inv-detail-lines { width: 100%; border-collapse: collapse; }
+.inv-detail-lines th, .inv-detail-lines td { padding: 6px 8px; border-bottom: 1px solid var(--c-border); font-size: 12.5px; }
+.inv-detail-lines th { text-align: left; color: var(--c-text-muted); font-weight: 600; }
+.inv-detail-lines .num { text-align: right; font-family: var(--font-mono); }
+
+.inv-pay-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
+@media (max-width: 640px) { .inv-pay-form { grid-template-columns: 1fr; } }
+
+/* revenue chart */
+.rev-chart { width: 100%; height: 260px; }
+.rev-chart svg { width: 100%; height: 100%; }
+
+.rev-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-4); margin-bottom: 20px; }
+@media (max-width: 1080px) { .rev-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 860px) { .rev-grid { grid-template-columns: 1fr; } }
+
+.rev-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4); }
+@media (max-width: 860px) { .rev-two { grid-template-columns: 1fr; } }
+
+/* ------------------------------------------------------------------
+   Cetak invoice
+
+   Aturan ini HANYA boleh berlaku saat tombol Cetak invoice ditekan
+   (body.print-invoice), bukan pada semua halaman. Sebelumnya di sini ada
+   `body * { visibility: hidden }` tanpa kelas pemicu; karena CSS ini ikut
+   dimuat di seluruh aplikasi, aturan itu membuat SEMUA dokumen cetak
+   (#print-root) tidak terlihat — daftar pasien dan rekam medis ikut
+   kosong. Jangan kembalikan aturan global semacam itu.
+
+   Invoice dicetak dari modal yang sudah terbuka: #screen-root
+   ditampilkan kembali, seluruh isinya disembunyikan, lalu hanya
+   .print-area yang terlihat. #print-root disembunyikan supaya dokumen
+   lain yang dibangun print.js tidak ikut tercetak.
+   ------------------------------------------------------------------ */
+@media print {
+  body.print-invoice #print-root { display: none !important; }
+  body.print-invoice #screen-root { display: block !important; }
+
+  body.print-invoice #screen-root * { visibility: hidden; }
+  /* Selektor wajib memuat #screen-root: tanpa itu ID pada aturan
+     "sembunyikan semua" di atas menang, dan invoice ikut tidak terlihat. */
+  body.print-invoice #screen-root .modal-backdrop,
+  body.print-invoice #screen-root .modal-backdrop * { visibility: visible; }
+
+  body.print-invoice .modal-backdrop {
+    display: block !important;
+    position: static !important;
+    inset: auto !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: transparent !important;
+  }
+  body.print-invoice .modal-backdrop > .modal {
+    display: block !important;
+    position: static !important;
+    width: auto !important;
+    max-width: none !important;
+    margin: 0 !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+  }
+  body.print-invoice .modal__head,
+  body.print-invoice .modal__foot { display: none !important; }
+  body.print-invoice .modal__body {
+    padding: 0 !important;
+    overflow: visible !important;
+    max-height: none !important;
+  }
+  body.print-invoice .modal__body > *:not(.print-area) { display: none !important; }
+
+  body.print-invoice .print-area {
+    position: static !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  body.print-invoice .inv-detail-lines th,
+  body.print-invoice .inv-detail-lines td { border-color: #555 !important; }
+}
+@media (max-width: 860px) {
+  .table-wrap.bill-table-wrap { display: none; }
+  .bill-cards { display: block; }
+}
+.inv-usage-line {
+  display: grid;
+  grid-template-columns: 1fr 90px 36px;
+  gap: 8px;
+  align-items: end;
+  margin-bottom: 8px;
+}
+.inv-usage-line select, .inv-usage-line input { width: 100%; }
+@media (max-width: 860px) {
+  .inv-usage-line { grid-template-columns: 1fr 80px 32px; }
+}
+

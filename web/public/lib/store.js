@@ -125,8 +125,20 @@ const Store = (() => {
     v.wound.eksudat    = Object.assign(defaultWound().eksudat,    (v.wound && v.wound.eksudat)    || {});
     v.photos = Object.assign({ before: null, after: null, catatan: '', ruler: false, rulerNote: '' }, v.photos || {});
     const dw = defaultWinner();
+    /* Rekam lama masih menyimpan winner.total hasil perhitungan 13 aspek,
+       sehingga angkanya tidak sebanding dengan band 10 aspek yang berlaku
+       sekarang. Bila kunjungan memang sudah punya objek scores, total
+       dihitung ulang dari scores itu dan hasil hitung yang dipakai —
+       nilai tersimpan dianggap basi. Kunjungan tanpa scores sama sekali
+       dibiarkan memakai total lamanya agar catatan yang belum pernah
+       dinilai tidak tiba-tiba kehilangan skor. */
+    const punyaScores = !!(v.winner && v.winner.scores);
     v.winner = Object.assign(dw, v.winner || {});
     v.winner.scores = Object.assign(dw.scores, (v.winner && v.winner.scores) || {});
+    if (punyaScores) {
+      const hasil = Scales.total(v.winner.scores);
+      v.winner.total = hasil ? hasil.sum : null;
+    }
     v.dressing = Object.assign({ nama: '', frekuensi: '', catatan: '' }, v.dressing || {});
     v.audit = Array.isArray(v.audit) ? v.audit : [];
     v.frozen = !!v.frozen;
@@ -551,21 +563,21 @@ const Store = (() => {
     const demo = [
       mk('Budi Santoso', '3273011208750001', 'L', '1975-08-12', ['Diabetes Mellitus'], [
         { date: dateAdd(-27), wound: { etiologi: ['Diabetes Mellitus (Diabetic Foot Ulcer)'], lokasi: 'Telapak kaki kanan (plantar)', ukuran: { panjang: '4.0', lebar: '3.0', kedalaman: '0.6' }, jaringan: { nekrotik: '30', slough: '40', granulasi: '25', epitel: '5' }, eksudat: { jumlah: 'Sedang', tipe: 'Serosanguinous' }, bau: 'Berbau Ringan', time: ['Kalor'], nrs: 6 },
-          scores: { size: 4, depth: 3, edges: 3, undermining: 2, necType: 2, necAmount: 3, exType: 2, exAmount: 3, skinColor: 3, edema: 3, induration: 2, granulation: 3, epithelial: 4 }, notes: 'Debridement awal, pasang foam dengan contact layer.' },
+          scores: { size: 4, depth: 3, edges: 3, undermining: 2, exType: 2, exAmount: 3, skinColor: 3, edema: 3, granulation: 3, epithelial: 4 }, notes: 'Debridement awal, pasang foam dengan contact layer.' },
         { date: dateAdd(-13), wound: { etiologi: ['Diabetes Mellitus (Diabetic Foot Ulcer)'], lokasi: 'Telapak kaki kanan (plantar)', ukuran: { panjang: '2.8', lebar: '2.2', kedalaman: '0.4' }, jaringan: { nekrotik: '10', slough: '25', granulasi: '55', epitel: '10' }, eksudat: { jumlah: 'Sedikit', tipe: 'Serous' }, bau: 'Tidak Berbau', time: [], nrs: 4 },
-          scores: { size: 3, depth: 2, edges: 2, undermining: 2, necType: 2, necAmount: 2, exType: 2, exAmount: 2, skinColor: 2, edema: 2, induration: 2, granulation: 2, epithelial: 3 }, notes: 'Granulasi membaik, ganti ke foam dengan contact layer.' },
+          scores: { size: 3, depth: 2, edges: 2, undermining: 2, exType: 2, exAmount: 2, skinColor: 2, edema: 2, granulation: 2, epithelial: 3 }, notes: 'Granulasi membaik, ganti ke foam dengan contact layer.' },
         { date: dateAdd(-3), wound: { etiologi: ['Diabetes Mellitus (Diabetic Foot Ulcer)'], lokasi: 'Telapak kaki kanan (plantar)', ukuran: { panjang: '1.6', lebar: '1.3', kedalaman: '0.2' }, jaringan: { nekrotik: '0', slough: '5', granulasi: '70', epitel: '25' }, eksudat: { jumlah: 'Sedikit', tipe: 'Serous' }, bau: 'Tidak Berbau', time: [], nrs: 2 },
-          scores: { size: 2, depth: 2, edges: 2, undermining: 1, necType: 1, necAmount: 1, exType: 2, exAmount: 2, skinColor: 2, edema: 1, induration: 1, granulation: 1, epithelial: 2 }, notes: 'Luka hampir menutup, epitelisasi progressing.' }
+          scores: { size: 2, depth: 2, edges: 2, undermining: 1, exType: 2, exAmount: 2, skinColor: 2, edema: 1, granulation: 1, epithelial: 2 }, notes: 'Luka hampir menutup, epitelisasi progressing.' }
       ]),
       mk('Siti Aminah', '3273016502900002', 'P', '1990-02-05', ['Hipertensi'], [
         { date: dateAdd(-18), wound: { etiologi: ['Dekubitus'], lokasi: 'Sakrum', ukuran: { panjang: '6.5', lebar: '5.0', kedalaman: '1.2' }, jaringan: { nekrotik: '20', slough: '50', granulasi: '30', epitel: '0' }, eksudat: { jumlah: 'Banyak', tipe: 'Purulent' }, bau: 'Sangat Berbau', time: ['Kalor', 'Dolor', 'Rubor', 'Tumor'], nrs: 8 },
-          scores: { size: 5, depth: 4, edges: 4, undermining: 4, necType: 3, necAmount: 3, exType: 5, exAmount: 4, skinColor: 4, edema: 3, induration: 3, granulation: 3, epithelial: 5 }, notes: 'Tanda infeksi aktif. Kultur luka, rujukan, evaluasi vacuum therapy.' },
+          scores: { size: 5, depth: 4, edges: 4, undermining: 4, exType: 5, exAmount: 4, skinColor: 4, edema: 3, granulation: 3, epithelial: 5 }, notes: 'Tanda infeksi aktif. Kultur luka, rujukan, evaluasi vacuum therapy.' },
         { date: dateAdd(-4), wound: { etiologi: ['Dekubitus'], lokasi: 'Sakrum', ukuran: { panjang: '4.2', lebar: '3.4', kedalaman: '0.7' }, jaringan: { nekrotik: '0', slough: '20', granulasi: '60', epitel: '20' }, eksudat: { jumlah: 'Sedang', tipe: 'Serous' }, bau: 'Tidak Berbau', time: [], nrs: 4 },
-          scores: { size: 3, depth: 3, edges: 2, undermining: 2, necType: 1, necAmount: 1, exType: 2, exAmount: 2, skinColor: 2, edema: 2, induration: 2, granulation: 2, epithelial: 3 }, notes: 'Infeksi terkendali, lanjut foam.' }
+          scores: { size: 3, depth: 3, edges: 2, undermining: 2, exType: 2, exAmount: 2, skinColor: 2, edema: 2, granulation: 2, epithelial: 3 }, notes: 'Infeksi terkendali, lanjut foam.' }
       ]),
       mk('Ahmad Fauzi', '3273011003750003', 'L', '1975-03-10', ['Hipertensi'], [
         { date: dateAdd(-9), wound: { etiologi: ['Trauma / Post-Op'], lokasi: 'Abdomen, area insisi', ukuran: { panjang: '5.0', lebar: '1.2', kedalaman: '0.4' }, jaringan: { nekrotik: '0', slough: '10', granulasi: '60', epitel: '30' }, eksudat: { jumlah: 'Sedang', tipe: 'Sanguinous' }, bau: 'Tidak Berbau', time: [], nrs: 3 },
-          scores: { size: 3, depth: 2, edges: 2, undermining: 1, necType: 1, necAmount: 1, exType: 3, exAmount: 3, skinColor: 1, edema: 1, induration: 1, granulation: 2, epithelial: 2 }, notes: 'Dehisensi ringan post-op, gunakan fiksasi jepit.' }
+          scores: { size: 3, depth: 2, edges: 2, undermining: 1, exType: 3, exAmount: 3, skinColor: 1, edema: 1, granulation: 2, epithelial: 2 }, notes: 'Dehisensi ringan post-op, gunakan fiksasi jepit.' }
       ])
     ];
 
