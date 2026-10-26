@@ -66,11 +66,13 @@ jobs:
       - name: Cek pg_dump
         run: |
           set -euo pipefail
-          if ! command -v pg_dump >/dev/null 2>&1; then
-            echo "::error::pg_dump tidak ada di runner ini."
+          # ubuntu-latest dapat membawa client PostgreSQL yang lebih lama
+          # daripada server Supabase. Gunakan client major 17 yang cocok
+          # melalui image resmi PostgreSQL, bukan client bawaan runner.
+          if ! docker run --rm postgres:17-alpine pg_dump --version; then
+            echo "::error::Client pg_dump PostgreSQL 17 tidak dapat dijalankan."
             exit 1
           fi
-          pg_dump --version
 
       - name: Ambil cadangan
         env:
@@ -87,14 +89,19 @@ jobs:
           # tabel, jadi memulihkan satu tabel saja tidak perlu
           # berkas utuh. Versi pg_dump yang terlalu lama ditolak
           # karena formatnya tidak cocok dengan server.
-          if ! pg_dump \
-                --dbname="$DATABASE_URL" \
-                --format=custom \
-                --compress=6 \
-                --no-owner \
-                --no-privileges \
-                --file="semenit/${nama}.dump"; then
-            echo "::error::pg_dump gagal. Periksa DATABASE_URL_BACKUP — port 6543 (transaction pooler) sering tidak cocok untuk pg_dump; pakai 5432."
+          if ! docker run --rm \
+                --env DATABASE_URL \
+                --env DUMP_FILE="${nama}.dump" \
+                --volume "$GITHUB_WORKSPACE/semenit:/out" \
+                postgres:17-alpine \
+                sh -ceu 'pg_dump \
+                  --dbname="$DATABASE_URL" \
+                  --format=custom \
+                  --compress=6 \
+                  --no-owner \
+                  --no-privileges \
+                  --file="/out/$DUMP_FILE"'; then
+            echo "::error::pg_dump gagal. Periksa versi client/server dan koneksi DATABASE_URL_BACKUP. Untuk koneksi Supabase IPv4, gunakan Shared Pooler - Session mode (port 5432), bukan transaction pooler port 6543."
             exit 1
           fi
 
