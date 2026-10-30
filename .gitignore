@@ -21,3 +21,6 @@ Thumbs.db
 # Bukan bagian aplikasi — jangan pernah ikut ter-commit.
 .freebuff/
 .freebuff-server.pid
+
+# State lokal alat bantu lain (opencode): bukan bagian aplikasi.
+.opencode/
