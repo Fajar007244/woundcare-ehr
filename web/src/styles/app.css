@@ -172,7 +172,145 @@ a { color: var(--c-primary); }
    Layout
    --------------------------------------------------------- */
 
-.view { padding: var(--sp-5); max-width: 1400px; margin: 0 auto; }
+.app-shell {
+  display: grid;
+  grid-template-columns: 224px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.app-sidebar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  width: 224px;
+  height: 100vh;
+  padding: var(--sp-4) var(--sp-3);
+  overflow-y: auto;
+  background: var(--c-surface);
+  border-right: 1px solid var(--c-border);
+}
+
+.app-sidebar__brand {
+  min-width: 0;
+  padding: var(--sp-2) var(--sp-1);
+}
+
+.app-sidebar__brand .brand {
+  width: 100%;
+  color: var(--c-text);
+}
+
+.app-sidebar__brand .brand__logo {
+  box-shadow: 0 0 0 1px var(--c-border), var(--shadow-sm);
+}
+
+.app-sidebar__brand .brand__title {
+  color: var(--c-text);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.app-sidebar__brand .brand__sub {
+  color: var(--c-text-muted);
+  opacity: 1;
+  white-space: normal;
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.app-sidebar__nav {
+  display: grid;
+  align-content: start;
+  gap: var(--sp-1);
+}
+
+.app-sidebar__item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  min-height: 42px;
+  padding: var(--sp-2) var(--sp-3);
+  color: var(--c-text-muted);
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
+  cursor: pointer;
+  transition: background .12s, color .12s, border-color .12s;
+}
+
+.app-sidebar__item:hover,
+.app-sidebar__item.is-active {
+  color: var(--c-primary-dark);
+  background: var(--c-primary-soft);
+}
+
+.app-sidebar__item.is-active {
+  border-color: var(--c-primary);
+}
+
+.app-sidebar__item:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+}
+
+.app-sidebar__ico {
+  flex: 0 0 20px;
+  color: var(--c-primary);
+}
+
+.app-sidebar__bottom {
+  margin-top: auto;
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--c-border);
+}
+
+.app-sidebar__bottom .user-menu-wrap { width: 100%; }
+.app-sidebar__bottom .user-chip {
+  width: 100%;
+  max-width: none;
+  color: var(--c-text);
+  background: var(--c-surface-2);
+  border-color: var(--c-border);
+}
+.app-sidebar__bottom .user-chip:hover,
+.app-sidebar__bottom .user-chip.is-open {
+  background: var(--c-primary-soft);
+  border-color: var(--c-primary);
+}
+.app-sidebar__bottom .user-chip__role { color: var(--c-text-muted); }
+.app-sidebar__bottom .user-menu { bottom: calc(100% + 8px); top: auto; left: 0; right: auto; }
+
+.app-main { min-width: 0; }
+
+.app-header--content {
+  min-height: 74px;
+  padding: var(--sp-3) var(--sp-5);
+}
+
+.app-header__page-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.app-header__clinic { font-weight: 700; font-size: 15px; line-height: 1.3; }
+.app-header__subtitle { font-size: 11px; opacity: .78; }
+
+.view { padding: var(--sp-5); max-width: 1600px; margin: 0 auto; }
 
 .page-head {
   display: flex;
@@ -432,9 +570,68 @@ a { color: var(--c-primary); }
 .search-inline { display: block; margin-bottom: var(--sp-4); }
 .search-inline input { width: 100%; min-height: 44px; }
 
+.patient-entry-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-4);
+}
+.patient-entry-option {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-width: 0;
+  padding: var(--sp-4);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+}
+.patient-entry-option__mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  background: var(--c-primary-soft);
+  color: var(--c-primary-dark);
+  font-size: 24px;
+  font-weight: 600;
+}
+.patient-entry-option__mark--old { font-size: 21px; }
+.patient-entry-option__content { flex: 1 1 auto; min-width: 0; }
+.patient-entry-option__content h2 { margin: 0 0 3px; font-size: 15px; }
+.patient-entry-option__content p { margin: 0; color: var(--c-text-muted); font-size: 12px; line-height: 1.45; }
+.patient-entry-option > .btn { flex: 0 0 auto; }
+
+@media (max-width: 860px) {
+  .patient-entry-options { grid-template-columns: minmax(0, 1fr); }
+  .patient-entry-option { flex-wrap: wrap; }
+  .patient-entry-option__content { flex-basis: calc(100% - 60px); }
+  .patient-entry-option > .btn { margin-left: 54px; }
+}
+
 /* Catatan: dulu di sini ada `.tab__ico, .tab__short { display: none; }`.
    Aturan itu dihapus — .tab__ico kini tampil juga di layar lebar (lihat
    blok Tabs di atas), dan .tab__short sudah disembunyikan di sana. */
+
+/* Daftar hasil laboratorium dan radiologi. */
+.investigation-section { padding: 16px 0; border-top: 1px solid var(--c-border); }
+.investigation-section__head, .investigation-entry__head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); flex-wrap: wrap; }
+.investigation-section__head { margin-bottom: 12px; }
+.investigation-section__head h3 { font-size: 14px; }
+.investigation-entry { padding: var(--sp-3); margin-bottom: var(--sp-3); border: 1px solid var(--c-border); border-radius: var(--r-md); background: var(--c-surface-2); }
+.investigation-entry__head { margin-bottom: var(--sp-3); }
+.investigation-empty { padding: var(--sp-3); color: var(--c-text-muted); font-size: 12px; border: 1px dashed var(--c-border-strong); border-radius: var(--r-sm); }
+
+/* Form CPPT: pemisah setiap elemen catatan klinis. */
+.cppt-section { padding: 16px 0; border-bottom: 1px solid var(--c-border); }
+.cppt-section:first-of-type { padding-top: 0; }
+.cppt-section:last-child { border-bottom: 0; padding-bottom: 0; }
+.cppt-section h3 { display: flex; align-items: center; gap: 9px; margin: 0 0 12px; font-size: 14px; }
+.cppt-section h3 > span { display: grid; place-items: center; flex: 0 0 28px; width: 28px; height: 28px; border-radius: 8px; background: var(--c-primary-soft); color: var(--c-primary-dark); font-size: 13px; }
+.cppt-section--time { padding-left: 14px; border-left: 3px solid var(--c-primary-soft); }
 
 /* ---------------------------------------------------------
    Forms
@@ -903,6 +1100,130 @@ table.data .row-actions { display: flex; gap: 4px; justify-content: flex-end; }
   transition: width .2s ease;
 }
 
+/* ---------- Status Kondisi Luka (bilah 1 .. 55) ---------- */
+.status-luka {
+  margin: 14px 0 4px;
+  /* .status-luka__ticks berheight 0, jadi angka & label di bawah bilah
+     mengisi padding bawah ini. 54px cukup untuk angka + label dua baris
+     ("Degenerasi luka") tanpa terpotong tepi kotak. */
+  padding: 12px 18px 54px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+}
+.status-luka__title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--c-text-muted);
+  margin-bottom: 10px;
+}
+.status-luka__rail {
+  position: relative;
+  height: 4px;
+  margin: 0 4px;
+  border-radius: 2px;
+  background: var(--c-border-strong);
+}
+/* Ujung panah kiri & kanan, seperti bilah pada formulir cetak. */
+.status-luka__rail::before,
+.status-luka__rail::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  transform: translateY(-50%);
+}
+.status-luka__rail::before {
+  left: -8px;
+  border-right: 8px solid var(--c-border-strong);
+}
+.status-luka__rail::after {
+  right: -8px;
+  border-left: 8px solid var(--c-border-strong);
+}
+/* Penanda X per kunjungan (tab Grafik Tren) */
+.status-luka__marks {
+  position: relative;
+  height: 88px;
+  margin: 0 4px 10px;
+}
+.status-luka__mark {
+  position: absolute;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1;
+  z-index: 2;
+}
+.status-luka__mark-date {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--c-text-muted);
+  white-space: nowrap;
+  margin-bottom: 2px;
+}
+.status-luka__mark-x {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--c-danger);
+}
+.status-luka__mark.is-latest .status-luka__mark-x {
+  color: var(--c-primary-dark);
+  font-size: 17px;
+}
+.status-luka__mark.is-latest .status-luka__mark-date {
+  color: var(--c-text);
+  font-weight: 700;
+}
+.status-luka__ticks {
+  position: relative;
+  height: 0;
+}
+.status-luka__tick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  text-align: center;
+  white-space: nowrap;
+}
+/* Label ujung tidak boleh keluar kotak: rata kiri di titik 1 dan rata
+   kanan di titik 55, sementara garis penandanya tetap di posisinya. */
+.status-luka__tick:first-child { transform: translateX(-2px); text-align: left; }
+.status-luka__tick:first-child::before { margin-left: 0; }
+.status-luka__tick:last-child { transform: translateX(calc(-100% + 2px)); text-align: right; }
+.status-luka__tick:last-child::before { margin-left: auto; margin-right: 0; }
+.status-luka__tick::before {
+  content: "";
+  display: block;
+  width: 3px;
+  height: 12px;
+  margin: -6px auto 4px;
+  border-radius: 1px;
+  background: var(--c-text);
+}
+.status-luka__n {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+}
+.status-luka__label {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--c-warn);
+  max-width: 132px;
+  white-space: normal;
+  line-height: 1.3;
+}
+
 /* ---------------------------------------------------------
    Photos
    --------------------------------------------------------- */
@@ -945,6 +1266,53 @@ table.data .row-actions { display: flex; gap: 4px; justify-content: flex-end; }
 .photo-slot__frame img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .photo-slot__placeholder { color: #9fb0bc; font-size: 26px; }
 .photo-slot__meta { font-size: 11px; color: var(--c-text-muted); display: flex; justify-content: space-between; gap: 6px; }
+
+/* Banyak foto per slot (sebelum / sesudah): deret thumbnail yang bisa
+   digulir, tiap foto dengan tombol hapus sendiri. */
+.photo-slot__count {
+  margin-left: 6px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--c-primary-soft);
+  color: var(--c-primary-dark);
+  font-size: 10.5px;
+  font-weight: 700;
+}
+.photo-slot__frame--multi {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 6px;
+  overflow-y: auto;
+  max-height: 220px;
+  cursor: default;
+}
+/* Selector ganda mengalahkan `.photo-slot__frame img { width/height:100% }`
+   yang spesifikasinya lebih rendah (0,1,1 vs 0,2,0). */
+.photo-slot__frame--multi .photo-thumb { width: 64px; height: 48px; object-fit: cover; }
+.photo-thumb-wrap { position: relative; flex: 0 0 auto; }
+.photo-thumb-wrap .photo-thumb { cursor: zoom-in; }
+.photo-thumb__del {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--c-danger);
+  border-radius: 50%;
+  background: #fff;
+  color: var(--c-danger);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.photo-thumb__del:hover { background: var(--c-danger); color: #fff; }
+.photo-thumb__del:disabled { opacity: .4; cursor: not-allowed; }
 
 .photo-thumb {
   width: 64px;
@@ -1830,6 +2198,74 @@ tr.is-changed::after { inset: 0; }
    supaya layar tablet tidak jadi penuh tombol raksasa. */
 @media (pointer: coarse) and (min-width: 861px) {
   .btn, .user-chip, .user-menu__item { min-height: 40px; }
+}
+
+@media (max-width: 900px) {
+  .app-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-sidebar {
+    position: sticky;
+    z-index: 50;
+    width: 100%;
+    height: auto;
+    max-height: none;
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-3);
+    overflow: visible;
+    border-right: 0;
+    border-bottom: 1px solid var(--c-border);
+  }
+
+  .app-sidebar__brand {
+    padding: 0 var(--sp-1);
+  }
+
+  .app-sidebar__brand .brand__logo {
+    width: 32px;
+    height: 32px;
+    flex-basis: 32px;
+  }
+
+  .app-sidebar__brand .brand__title { font-size: 11px; }
+  .app-sidebar__brand .brand__sub { display: none; }
+
+  .app-sidebar__nav {
+    display: flex;
+    gap: var(--sp-1);
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+
+  .app-sidebar__item {
+    width: auto;
+    min-height: 38px;
+    flex: 0 0 auto;
+    white-space: nowrap;
+    padding: var(--sp-2) var(--sp-3);
+  }
+
+  .app-sidebar__bottom {
+    position: absolute;
+    top: var(--sp-2);
+    right: var(--sp-3);
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .app-sidebar__bottom .user-chip {
+    width: auto;
+    min-height: 36px;
+    padding: 4px 8px;
+  }
+
+  .app-sidebar__bottom .user-chip__text { display: none; }
+  .app-sidebar__bottom .user-menu { top: calc(100% + 8px); bottom: auto; left: auto; right: 0; }
+  .app-header--content { min-height: 56px; padding: var(--sp-2) var(--sp-3); }
+  .app-header__clinic { font-size: 13px; }
+  .app-header__subtitle { display: none; }
 }
 
 /* Hide chrome on screen for print containers */

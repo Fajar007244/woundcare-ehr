@@ -1,9 +1,9 @@
 /* ============================================================
-   db.js — Skema & akses data PostgreSQL (Supabase)
+   db.js  ESkema & akses data PostgreSQL (Supabase)
    ============================================================
    Versi PostgreSQL dari lapisan data. NAMA FUNGSI DAN PERILAKUNYA
    sama persis dengan versi SQLite sebelumnya, jadi server.js tidak
-   perlu tahu mesin datanya yang diganti — hanya menjadi async.
+   perlu tahu mesin datanya yang diganti  Ehanya menjadi async.
 
    Yang berubah dari versi SQLite:
      - prepare/run/get/all  ->  pool.query(sql, params)
@@ -29,7 +29,7 @@ const DATABASE_URL = process.env.DATABASE_URL || '';
 
 /* Pool dibuat SEKALI di tingkat modul. Di serverless setiap instance
    bisa Davies dipakai beberapa permintaan berturut-turut, jadi
-   pool yang sama dipakai ulang — membuat koneksi baru tiap permintaan
+   pool yang sama dipakai ulang  Emembuat koneksi baru tiap permintaan
    justru itu yang membuat serverless lambat dan menghabiskan kuota. */
 const pool = new Pool({
   connectionString: DATABASE_URL,
@@ -165,7 +165,7 @@ CREATE TABLE IF NOT EXISTS clinic_config (
       Rp 1.000, bukan Rp 1.000,00. Menyimpannya sebagai NUMERIC akan
       membuat driver pg mengembalikan STRING (bukan number) demi
       menjaga presisi, lalu setiap penjumlahan di JavaScript harus
-      di-parse ulang — dan satu tempat yang lupa parse menghasilkan
+      di-parse ulang  Edan satu tempat yang lupa parse menghasilkan
       "1000" + "2000" = "10002000" yang tampak seperti angka.
    2. Tidak ada pembulatan: total invoice selalu sama dengan jumlah
       baris yang tertulis di nota. Kasir dan laporan tidak pernah
@@ -182,7 +182,7 @@ CREATE TABLE IF NOT EXISTS items (
   id         TEXT PRIMARY KEY,
   kode       TEXT NOT NULL DEFAULT '',
   nama       TEXT NOT NULL,
-  jenis      TEXT NOT NULL DEFAULT 'obat',   /* 'obat' | 'bmhp' */
+  jenis      TEXT NOT NULL DEFAULT 'obat',   /* 'obat' | 'bmhp' | 'dressing' | 'alkes' */
   satuan     TEXT NOT NULL DEFAULT '',
   harga_beli INTEGER NOT NULL DEFAULT 0,
   harga_jual INTEGER NOT NULL DEFAULT 0,
@@ -229,6 +229,8 @@ CREATE TABLE IF NOT EXISTS invoices (
   total        INTEGER NOT NULL DEFAULT 0,
   dibayar      INTEGER NOT NULL DEFAULT 0,
   status       TEXT NOT NULL DEFAULT 'belum', /* 'belum'|'sebagian'|'lunas'|'batal' */
+  layanan      TEXT NOT NULL DEFAULT 'onsite', /* 'onsite'|'homecare'  Ejenis layanan input invoice */
+  rekomendasi  TEXT NOT NULL DEFAULT '',       /* saran: kunjungan ke-… & kontrol selanjutnya … */
   catatan      TEXT NOT NULL DEFAULT '',
   oleh_id      INTEGER,
   oleh_nama    TEXT NOT NULL DEFAULT '',
@@ -238,18 +240,19 @@ CREATE TABLE IF NOT EXISTS invoices (
 
 /* Baris tagihan. nama, satuan, dan harga DISALIN dari master
    saat transaksi, bukan dibaca lewat JOIN. Kalau harga barang naik
-   bulan depan, nota lama tidak boleh ikut berubah — nota adalah
+   bulan depan, nota lama tidak boleh ikut berubah  Enota adalah
    dokumen hukum, bukan tampilan master data. */
 CREATE TABLE IF NOT EXISTS invoice_lines (
   id         TEXT PRIMARY KEY,
   invoice_id TEXT NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
-  jenis      TEXT NOT NULL DEFAULT 'tindakan', /* 'tindakan'|'obat'|'bmhp' */
+  jenis      TEXT NOT NULL DEFAULT 'tindakan', /* 'tindakan'|'obat'|'bmhp'|'dressing'|'alkes' */
   item_id    TEXT NOT NULL DEFAULT '',
   nama       TEXT NOT NULL DEFAULT '',
   qty        INTEGER NOT NULL DEFAULT 1,
   satuan     TEXT NOT NULL DEFAULT '',
   harga      INTEGER NOT NULL DEFAULT 0,
   jumlah     INTEGER NOT NULL DEFAULT 0,
+  diskon     INTEGER NOT NULL DEFAULT 0,   /* persentase diskon per baris, 0-100 */
   urut       INTEGER NOT NULL DEFAULT 0
 );
 
@@ -305,6 +308,14 @@ CREATE INDEX IF NOT EXISTS ix_invoices_visit  ON invoices(visit_id);
 CREATE INDEX IF NOT EXISTS ix_payments_invoice ON payments(invoice_id);
 CREATE INDEX IF NOT EXISTS ix_payments_tgl    ON payments(tanggal);
 CREATE INDEX IF NOT EXISTS ix_flog_modul      ON finance_log(modul, pada DESC);
+
+/* ---------- Migrasi basis data lama ----------
+   CREATE TABLE IF NOT EXISTS TIDAK menambah kolom ke tabel yang sudah ada,
+   jadi tiga ALTER idempoten di bawah dijalankan setiap boot. Pada basis data
+   baru ketiganya no-op (kolom sudah dibuat oleh CREATE TABLE di atas). */
+ALTER TABLE invoice_lines ADD COLUMN IF NOT EXISTS diskon INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS layanan TEXT NOT NULL DEFAULT 'onsite';
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS rekomendasi TEXT NOT NULL DEFAULT '';
 `;
 
 /* ---------- Password ---------- */
@@ -445,13 +456,13 @@ async function seedItemsIfEmpty() {
 
 /**
  * Peringatan saja: kalau tidak ada admin aktif, semua endpoint admin
- * akan menolak siapa pun. Tidak membuat pengguna otomatis — itu
+ * akan menolak siapa pun. Tidak membuat pengguna otomatis  Eitu
  * keputusan operator, bukan side-effect saat start.
  */
 async function ensureAdminExists() {
   const n = (await pool.query("SELECT COUNT(*) c FROM users WHERE peran = 'Admin' AND aktif = 1")).rows[0].c;
   if (Number(n) > 0) return;
-  console.log('  [db] PERINGATAN: tidak ada admin aktif — semua akses admin akan ditolak');
+  console.log('  [db] PERINGATAN: tidak ada admin aktif  Esemua akses admin akan ditolak');
 }
 
 /* ---------- Auth ---------- */
@@ -686,7 +697,7 @@ async function saveVisit(p) {
 async function deleteVisit(id) {
   await ready();
   // audit_log & photos sengaja tanpa FK (agar dipisah dari nasib kunjungan),
-  // jadi harus dibersihkan eksplisit — kalau tidak, fotonya jadi yatim.
+  // jadi harus dibersihkan eksplisit  Ekalau tidak, fotonya jadi yatim.
   await pool.query('DELETE FROM audit_log WHERE visit_id = $1', [id]);
   await deletePhotosForVisit(id);
   await pool.query('DELETE FROM visits WHERE id = $1', [id]);
@@ -732,15 +743,16 @@ function photoIdFor(visitId, kind, bytes) {
 
 /**
  * Simpan satu foto untuk (kunjungan, jenis). Mengembalikan rujukannya.
- * Satu kunjungan hanya punya satu foto `before` dan satu `after`, jadi
- * baris lain dengan pasangan yang sama dibuang lebih dulu.
+ * Satu kunjungan boleh punya LEBIH DARI SATU foto `before` maupun
+ * `after`, jadi baris lain dengan pasangan yang sama TIDAK dibuang  E
+ * unggahan berikutnya menambah daftar, bukan menimpa yang lama.
+ * Id foto dihitung dari isi binernya, jadi unggahan berkas yang sama
+ * persis tetap menimpa barisnya sendiri (tidak jadi duplikat).
  */
 async function savePhotoFor(visitId, kind, { mime, bytes, width, height }) {
   await ready();
   const buf = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
   const id = photoIdFor(visitId, kind, buf);
-  await pool.query('DELETE FROM photos WHERE visit_id = $1 AND kind = $2 AND id <> $3',
-    [String(visitId), String(kind), id]);
   await pool.query(
     `INSERT INTO photos (id, visit_id, kind, mime, width, height, size, bytes, dibuat)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -775,14 +787,14 @@ async function deletePhoto(id) {
   return r.rowCount;
 }
 
-/** Buang foto milik satu kunjungan — dipanggil saat kunjungan dihapus. */
+/** Buang foto milik satu kunjungan  Edipanggil saat kunjungan dihapus. */
 async function deletePhotosForVisit(visitId) {
   await ready();
   const r = await pool.query('DELETE FROM photos WHERE visit_id = $1', [String(visitId)]);
   return r.rowCount;
 }
 
-/** Buang foto seluruh kunjungan milik satu pasien — saat pasien dihapus. */
+/** Buang foto seluruh kunjungan milik satu pasien  Esaat pasien dihapus. */
 async function deletePhotosForPatient(patientId) {
   await ready();
   const r = await pool.query(
@@ -812,31 +824,52 @@ async function photoStats() {
 /**
  * Ubah data URL di v.photos menjadi BLOB + rujukan.
  *
- * Dipanggil dari saveVisit, jadi SEMUA jalur simpan ikut ternormalisasi —
+ * Dipanggil dari saveVisit, jadi SEMUA jalur simpan ikut ternormalisasi  E
  * termasuk pemulihan berkas cadangan lama yang masih berisi base64.
  */
 async function splitPhotos(v) {
   if (!v || !v.photos) return v;
   for (const kind of ['before', 'after']) {
-    const val = v.photos[kind];
-    if (!val) continue;
+    const listKey = kind + 'List';
 
-    /* Bentuk lama: data URL. Inilah jalur migrasi — begitu kunjungan
-       disimpan sekali, base64-nya pindah ke tabel `photos` sebagai BLOB. */
-    if (typeof val === 'string') {
-      const m = /^data:([^;,]+);base64,([\s\S]*)$/.exec(val);
-      if (!m) continue;                                    // bukan data URL
-      const buf = Buffer.from(m[2], 'base64');
-      v.photos[kind] = await savePhotoFor(v.id, kind, { mime: m[1], bytes: buf, width: 0, height: 0 });
-      continue;
-    }
+    /* Daftar multi-foto adalah sumber kebenaran; data lama yang hanya
+       punya photos[kind] diangkat menjadi daftar satu baris. */
+    const items = Array.isArray(v.photos[listKey])
+      ? v.photos[listKey]
+      : (v.photos[kind] ? [v.photos[kind]] : []);
 
     /* Bentuk baru: rujukan. Pastikan binernya benar-benar ada. Kalau tidak,
-       rujukannya dibuang, daripada meninggalkan gambar rusak. */
-    if (typeof val === 'object' && val.id) {
-      const a = await pool.query('SELECT 1 AS x FROM photos WHERE id = $1', [String(val.id)]);
-      if (!a.rows.length) v.photos[kind] = null;
+       rujukannya dibuang, daripada meninggalkan gambar rusak.
+       Satu query untuk semua id  EsplitPhotos dipanggil setiap kunjungan
+       disimpan, jadi jumlahnya dijaga tetap konstan. */
+    const ids = items
+      .filter(x => x && typeof x === 'object' && x.id)
+      .map(x => String(x.id));
+    const ada = new Set();
+    if (ids.length) {
+      const a = await pool.query('SELECT id FROM photos WHERE id = ANY($1)', [ids]);
+      a.rows.forEach(r => ada.add(r.id));
     }
+
+    const bersih = [];
+    for (const val of items) {
+      if (!val) continue;
+
+      /* Bentuk lama: data URL. Inilah jalur migrasi  Ebegitu kunjungan
+         disimpan sekali, base64-nya pindah ke tabel `photos` sebagai BLOB. */
+      if (typeof val === 'string') {
+        const m = /^data:([^;,]+);base64,([\s\S]*)$/.exec(val);
+        if (!m) continue;                                    // bukan data URL
+        const buf = Buffer.from(m[2], 'base64');
+        bersih.push(await savePhotoFor(v.id, kind, { mime: m[1], bytes: buf, width: 0, height: 0 }));
+        continue;
+      }
+
+      if (typeof val === 'object' && val.id && ada.has(String(val.id))) bersih.push(val);
+    }
+
+    v.photos[listKey] = bersih;
+    v.photos[kind] = bersih[0] || null;
   }
   return v;
 }
@@ -875,7 +908,9 @@ async function snapshot(clinic) {
   const visits   = (await pool.query('SELECT * FROM visits ORDER BY tanggal, jam')).rows;
   const consents = (await pool.query('SELECT * FROM consents ORDER BY tanggal')).rows;
   const audits   = (await pool.query('SELECT * FROM audit_log ORDER BY id ASC')).rows;
-  const allPhotos = (await pool.query('SELECT id, visit_id, kind, mime, width, height, size FROM photos')).rows;
+  const allPhotos = (await pool.query(
+    'SELECT id, visit_id, kind, mime, width, height, size FROM photos ORDER BY dibuat, id'
+  )).rows;
 
   const auditByVisit = {};
   for (const a of audits) {
@@ -888,7 +923,8 @@ async function snapshot(clinic) {
 
   const photosByVisit = {};
   for (const ph of allPhotos) {
-    (photosByVisit[ph.visit_id] = photosByVisit[ph.visit_id] || {})[ph.kind] = rujukanFoto(ph);
+    const per = (photosByVisit[ph.visit_id] = photosByVisit[ph.visit_id] || {});
+    (per[ph.kind] = per[ph.kind] || []).push(rujukanFoto(ph));
   }
 
   const visitsByPatient = {};
@@ -898,12 +934,16 @@ async function snapshot(clinic) {
     obj.frozen = !!v.frozen;
     /* Rujukan foto diambil dari tabel `photos`, bukan dari salinan di JSON.
        Efek sampingnya menguntungkan: kunjungan yang sempat kehilangan
-       rujukannya pulih sendiri di sini. */
-    const fp = photosByVisit[v.id];
-    if (fp) {
-      if (!obj.photos) obj.photos = { before: null, after: null, catatan: '', ruler: false, rulerNote: '' };
-      if (fp.before) obj.photos.before = fp.before;
-      if (fp.after) obj.photos.after = fp.after;
+       rujukannya pulih sendiri di sini.
+       - photos[kind]List  : SEMUA foto slot itu (sumber kebenaran)
+       - photos[kind]      : foto pertama  Etetap dibaca cetak, galeri,
+                             ekspor CSV, dan penanda "sudah ada foto" */
+    const fp = photosByVisit[v.id] || {};
+    if (!obj.photos) obj.photos = { before: null, after: null, catatan: '', ruler: false, rulerNote: '' };
+    for (const kind of ['before', 'after']) {
+      const daftar = fp[kind] || [];
+      obj.photos[kind + 'List'] = daftar;
+      obj.photos[kind] = daftar[0] || null;
     }
     (visitsByPatient[v.patient_id] = visitsByPatient[v.patient_id] || []).push(obj);
   }
@@ -941,8 +981,8 @@ async function snapshot(clinic) {
 
 /**
  * Terapkan snapshot penuh ke basis data.
- * mode 'replace' — kosongkan dulu, lalu isi (pemulihan cadangan).
- * mode 'merge'   — isi tanpa mengosongkan; ID yang sama ditimpa.
+ * mode 'replace'  Ekosongkan dulu, lalu isi (pemulihan cadangan).
+ * mode 'merge'    Eisi tanpa mengosongkan; ID yang sama ditimpa.
  *
  *Versi PostgreSQL memakai TRANSAKSI. Versi SQLite sebelumnya tidak, dan
  * itu berarti server mati di tengah pemulihan -> database setengah terisi
@@ -957,7 +997,7 @@ async function replaceAll(snap, merge = false, opts = {}) {
     if (!merge) {
       /* Foto diperlakukan berbeda dari tabel lain.
        *
-       * Pada pemulihan dari .zip, foto SUDAH diunggah lebih dulu — bukan
+       * Pada pemulihan dari .zip, foto SUDAH diunggah lebih dulu  Ebukan
        * sebagai base64 di dalam snapshot, karena itu membuat satu
        * permintaan melebihi batas 4,5 MB milik Vercel. Karena itu
        * `DELETE FROM photos` di sini justru membuang foto yang baru saja
@@ -1024,7 +1064,7 @@ async function replaceAll(snap, merge = false, opts = {}) {
  * Snapshot untuk BERKAS CADANGAN: sama seperti snapshot(), tetapi setiap
  * rujukan foto ditukar kembali menjadi data URL base64.
  *
- * Di sinilah base64 masih dipakai — dan itu memang disengaja. Berkas
+ * Di sinilah base64 masih dipakai  Edan itu memang disengaja. Berkas
  * cadangan harus mandiri: bisa memulihkan foto di komputer lain yang tidak
  * punya basis data asalnya. Base64 yang 33% lebih besar tidak masalah di
  * berkas yang diunduh sekali-sekali.
@@ -1040,12 +1080,15 @@ async function exportSnapshot(clinic) {
       const ps = v.photos;
       if (!ps) continue;
       for (const kind of ['before', 'after']) {
-        const ref = ps[kind];
-        if (!ref || typeof ref !== 'object' || !ref.id) continue;
-        const row = bytesById[ref.id];
-        if (!row) continue;
-        const b = Buffer.isBuffer(row.bytes) ? row.bytes : Buffer.from(row.bytes);
-        ps[kind] = 'data:' + (row.mime || 'image/jpeg') + ';base64,' + b.toString('base64');
+        const ubah = ref => {
+          if (!ref || typeof ref !== 'object' || !ref.id) return ref;
+          const row = bytesById[ref.id];
+          if (!row) return ref;
+          const b = Buffer.isBuffer(row.bytes) ? row.bytes : Buffer.from(row.bytes);
+          return 'data:' + (row.mime || 'image/jpeg') + ';base64,' + b.toString('base64');
+        };
+        if (Array.isArray(ps[kind + 'List'])) ps[kind + 'List'] = ps[kind + 'List'].map(ubah);
+        ps[kind] = ubah(ps[kind]);
       }
     }
   }
@@ -1084,7 +1127,7 @@ async function backupManifest(clinic) {
 /**
  * Aliran foto satu per satu, dibaca dari database dalam berkas kecil.
  * Dipakai agar penulisan .zip tidak pernah memegang lebih dari satu
- * gambar di memori — inilah yang membuat arsip skala klinik mungkin.
+ * gambar di memori  Einilah yang membuat arsip skala klinik mungkin.
  */
 async function* photoStream(batchSize = 25) {
   await ready();
@@ -1191,7 +1234,7 @@ async function accessCount() {
  * berbeda tanpa cara mengetahui selisihnya. Keduanya harus jatuh bersama.
  */
 
-const JENIS_ITEM = ['obat', 'bmhp'];
+const JENIS_ITEM = ['obat', 'bmhp', 'dressing', 'alkes'];
 const JENIS_MOVE = ['masuk', 'keluar', 'koreksi'];
 const STATUS_INVOICE = ['belum', 'sebagian', 'lunas', 'batal'];
 const METODE_BAYAR = ['tunai', 'transfer', 'kartu', 'qris'];
@@ -1207,7 +1250,7 @@ function idBaru(prefix) {
  * Tanggal bisnis (YYYY-MM-DD) memakai zona waktu SERVER, bukan UTC.
  * nowISO() tetap dipakai untuk jejak waktu teknis; tanggal nota harus
  * tanggal yang dilihat kasir di dinding. Di WIB/WITA/WIT, tanggal UTC bisa
- * berbeda satu hari pada pagi buta — invoice tanggal 1 bisa tercatat
+ * berbeda satu hari pada pagi buta  Einvoice tanggal 1 bisa tercatat
  * tanggal 31 bulan sebelumnya.
  */
 function tanggalHariIni(d = new Date()) {
@@ -1219,7 +1262,7 @@ function tanggalHariIni(d = new Date()) {
 /**
  * Paksa nilai menjadi bilangan bulat. Uang dan stok disimpan INTEGER
  * (lihat komentar skema), jadi di sini pecahan dipotong ke bawah dan nilai
- * bukan angka DITOLAK — bukan diam-diam menjadi 0, karena 0 yang salah
+ * bukan angka DITOLAK  Ebukan diam-diam menjadi 0, karena 0 yang salah
  * lebih berbahaya daripada pesan galat.
  */
 function bulat(v, label) {
@@ -1245,7 +1288,7 @@ const olehDari = (oleh) => ({
  *
  * `q` boleh berupa client transaksi (supaya tercatat atomik bersama
  * perubahannya) atau pool. Pemanggil yang sedang di dalam transaksi WAJIB
- * mengirim client-nya — memakai pool di tengah transaksi berarti barisnya
+ * mengirim client-nya  Ememakai pool di tengah transaksi berarti barisnya
  * bisa COMMIT walau transaksi induknya ROLLBACK.
  */
 async function catatLog(q, { modul, aksi, refId, judul, detail, oleh } = {}) {
@@ -1299,7 +1342,7 @@ async function saveItem(item) {
 
   if (b.jenis !== undefined && b.jenis !== null && b.jenis !== '' &&
       JENIS_ITEM.indexOf(String(b.jenis)) < 0) {
-    throw new Error('Jenis barang harus obat atau bmhp.');
+    throw new Error('Jenis barang harus obat, bmhp, dressing, atau alkes.');
   }
 
   const id = b.id ? String(b.id) : idBaru('it_');
@@ -1334,11 +1377,11 @@ async function saveItem(item) {
     detail = 'barang baru, stok awal ' + stokAwal + (satuan ? ' ' + satuan : '');
   } else {
     const beda = [];
-    if (String(lama.nama) !== nama) beda.push('nama "' + lama.nama + '" → "' + nama + '"');
-    if (String(lama.jenis) !== jenis) beda.push('jenis ' + lama.jenis + ' → ' + jenis);
-    if (Number(lama.harga_beli) !== hargaBeli) beda.push('harga beli Rp' + lama.harga_beli + ' → Rp' + hargaBeli);
-    if (Number(lama.harga_jual) !== hargaJual) beda.push('harga jual Rp' + lama.harga_jual + ' → Rp' + hargaJual);
-    if (Number(lama.stok_min) !== stokMin) beda.push('stok minimum ' + lama.stok_min + ' → ' + stokMin);
+    if (String(lama.nama) !== nama) beda.push('nama "' + lama.nama + '" ↁE"' + nama + '"');
+    if (String(lama.jenis) !== jenis) beda.push('jenis ' + lama.jenis + ' ↁE' + jenis);
+    if (Number(lama.harga_beli) !== hargaBeli) beda.push('harga beli Rp' + lama.harga_beli + ' ↁERp' + hargaBeli);
+    if (Number(lama.harga_jual) !== hargaJual) beda.push('harga jual Rp' + lama.harga_jual + ' ↁERp' + hargaJual);
+    if (Number(lama.stok_min) !== stokMin) beda.push('stok minimum ' + lama.stok_min + ' ↁE' + stokMin);
     if (Number(lama.aktif) !== aktif) beda.push(aktif ? 'diaktifkan' : 'dinonaktifkan');
     detail = beda.length ? beda.join('; ') : 'disimpan tanpa perubahan nilai';
   }
@@ -1378,7 +1421,7 @@ async function saveItem(item) {
 }
 
 /**
- * Nonaktifkan barang — TIDAK menghapus barisnya.
+ * Nonaktifkan barang  ETIDAK menghapus barisnya.
  *
  * stock_moves dan invoice_lines merujuk riwayat barang ini. Menghapus
  * barisnya akan memutus jejak audit (dan karena FK ON DELETE CASCADE pada
@@ -1487,8 +1530,8 @@ async function addStockMove({ itemId, jenis, jumlah, alasan, visitId, patientId,
       refId: it.id,
       judul: it.nama,
       detail: (jns === 'masuk' ? '+' : (jns === 'koreksi' && n > 0 ? '+' : '')) + n +
-        (it.satuan ? ' ' + it.satuan : '') + ', stok ' + it.stok + ' → ' + akhir +
-        ' — ' + keterangan,
+        (it.satuan ? ' ' + it.satuan : '') + ', stok ' + it.stok + ' ↁE' + akhir +
+        '  E' + keterangan,
       oleh: org
     });
 
@@ -1620,11 +1663,15 @@ async function hitungUlangInvoice(client, invoiceId) {
  * bukan dari body. Kalau klien boleh mengirim harga, siapa pun bisa menagih
  * obat Rp 1 dan aturan "hanya admin boleh mengubah harga" kehilangan arti.
  */
-async function createInvoice({ patientId, patientNama, visitId, lines, diskon, catatan, oleh } = {}) {
+async function createInvoice({ patientId, patientNama, visitId, lines, diskon, catatan,
+                               layanan, rekomendasi, oleh } = {}) {
   await ready();
   const daftar = (Array.isArray(lines) ? lines : [])
     .filter(l => l && (l.itemId || String(l.nama || '').trim()));
   if (!daftar.length) throw new Error('Invoice harus punya minimal satu baris.');
+
+  const jnsLayanan = layanan === 'homecare' || layanan === 'home_care' ? 'homecare' : 'onsite';
+  const rek = String(rekomendasi || '').trim();
 
   const org = olehDari(oleh);
   const client = await pool.connect();
@@ -1652,21 +1699,34 @@ async function createInvoice({ patientId, patientNama, visitId, lines, diskon, c
         const it = ir.rows[0];
         if (!it) throw new Error('Barang pada baris invoice tidak ditemukan.');
         if (Number(it.aktif) !== 1) throw new Error('Barang ' + it.nama + ' sudah nonaktif.');
-        jenis = it.jenis === 'obat' ? 'obat' : 'bmhp';
+        jenis = JENIS_ITEM.indexOf(it.jenis) >= 0 ? it.jenis : 'bmhp';
         nama = it.nama;
         satuan = it.satuan;
         harga = Number(it.harga_jual);
       } else {
-        jenis = ['tindakan', 'obat', 'bmhp'].indexOf(String(l.jenis)) >= 0
+        jenis = ['tindakan', 'obat', 'bmhp', 'dressing', 'alkes'].indexOf(String(l.jenis)) >= 0
           ? String(l.jenis) : 'tindakan';
         if (!nama) throw new Error('Setiap baris invoice harus punya nama atau itemId.');
         harga = bulat(l.harga === undefined || l.harga === null ? 0 : l.harga, 'Harga');
         if (harga < 0) throw new Error('Harga tidak boleh negatif.');
       }
 
-      const jumlah = qty * harga;
+      const jumlahKotor = qty * harga;
+
+      /* Diskon PER BARIS dalam persen (0-100), sesuai kolom "Dis." pada
+         invoice: dressing, obat, jasa tindakan, dan transport masing-masing
+         bisa diberi potongan sendiri. `jumlah` disimpan NETTO
+         (qty ÁEharga ∁Ediskon baris) supaya subtotal = SUM(jumlah) tetap
+         benar dan hitungUlangInvoice tidak perlu diubah. */
+      let diskonPct = 0;
+      if (l.diskon !== undefined && l.diskon !== null && l.diskon !== '') {
+        diskonPct = bulat(l.diskon, 'Diskon baris');
+        if (diskonPct < 0 || diskonPct > 100) throw new Error('Diskon baris harus antara 0 dan 100 persen.');
+      }
+      const jumlah = jumlahKotor - Math.round(jumlahKotor * diskonPct / 100);
+
       subtotal += jumlah;
-      baris.push({ jenis, itemId, nama, qty, satuan, harga, jumlah, urut: urut++ });
+      baris.push({ jenis, itemId, nama, qty, satuan, harga, jumlah, diskon: diskonPct, urut: urut++ });
     }
 
     const diskonN = Math.max(0, bulat(diskon === undefined || diskon === null ? 0 : diskon, 'Diskon'));
@@ -1675,21 +1735,21 @@ async function createInvoice({ patientId, patientNama, visitId, lines, diskon, c
     const inv = await client.query(
       `INSERT INTO invoices
          (id, nomor, patient_id, patient_nama, visit_id, tanggal, subtotal, diskon, total, dibayar,
-          status, catatan, oleh_id, oleh_nama, dibuat, diubah)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0, 'belum', $10, $11, $12, $13, $13)
+          status, layanan, rekomendasi, catatan, oleh_id, oleh_nama, dibuat, diubah)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0, 'belum', $10, $11, $12, $13, $14, $15, $15)
        RETURNING *`,
       [id, nomor, patientId ? String(patientId) : '', String(patientNama || '').trim(),
        visitId ? String(visitId) : '', tanggalHariIni(),
-       subtotal, diskonN, total, String(catatan || ''),
+       subtotal, diskonN, total, jnsLayanan, rek, String(catatan || ''),
        org.id, org.nama, pada]
     );
 
     for (const b of baris) {
       await client.query(
         `INSERT INTO invoice_lines
-           (id, invoice_id, jenis, item_id, nama, qty, satuan, harga, jumlah, urut)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-        [idBaru('il_'), id, b.jenis, b.itemId, b.nama, b.qty, b.satuan, b.harga, b.jumlah, b.urut]
+           (id, invoice_id, jenis, item_id, nama, qty, satuan, harga, jumlah, diskon, urut)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        [idBaru('il_'), id, b.jenis, b.itemId, b.nama, b.qty, b.satuan, b.harga, b.jumlah, b.diskon, b.urut]
       );
     }
 
@@ -1698,7 +1758,8 @@ async function createInvoice({ patientId, patientNama, visitId, lines, diskon, c
       aksi: 'invoice_buat',
       refId: id,
       judul: nomor,
-      detail: 'Total Rp' + total + ' · ' + baris.length + ' baris' +
+      detail: 'Total Rp' + total + ' · ' + baris.length + ' baris · ' +
+        (jnsLayanan === 'homecare' ? 'Home Care' : 'Onsite') +
         (String(patientNama || '').trim() ? ' · ' + String(patientNama).trim() : ''),
       oleh: org
     });
@@ -1804,7 +1865,7 @@ async function addPayment({ invoiceId, tanggal, metode, jumlah, catatan, oleh } 
       judul: inv.nomor,
       detail: 'Rp' + n + ' via ' + mtd + ' · status ' + status +
         (inv.patient_nama ? ' · ' + inv.patient_nama : '') +
-        (String(catatan || '').trim() ? ' — ' + String(catatan).trim() : ''),
+        (String(catatan || '').trim() ? '  E' + String(catatan).trim() : ''),
       oleh: org
     });
 
@@ -1855,7 +1916,7 @@ async function setInvoiceStatus({ id, status, oleh } = {}) {
       aksi: 'invoice_status',
       refId: inv.id,
       judul: inv.nomor,
-      detail: 'status ' + inv.status + ' → ' + st +
+      detail: 'status ' + inv.status + ' ↁE' + st +
         (inv.patient_nama ? ' · ' + inv.patient_nama : ''),
       oleh
     });
@@ -1885,7 +1946,7 @@ async function setInvoiceStatus({ id, status, oleh } = {}) {
  *   5. Cari invoice kunjungan yang belum 'batal'; bila tidak ada, buat baru
  *      (nomor harian, di dalam transaksi yang sama).
  *   6. INSERT invoice_lines dengan harga dari items.harga_jual dan nama
- *      yang disalin saat itu — nota lama tidak boleh berubah saat harga
+ *      yang disalin saat itu  Enota lama tidak boleh berubah saat harga
  *      master naik.
  *   7. Hitung ulang subtotal/total/dibayar/status dari tabel sumber.
  *   8. COMMIT. Galat di langkah mana pun -> ROLLBACK, sehingga stok dan
@@ -2009,7 +2070,7 @@ async function confirmUsage({ visitId, patientId, patientNama, lines, oleh } = {
         `INSERT INTO invoice_lines
            (id, invoice_id, jenis, item_id, nama, qty, satuan, harga, jumlah, urut)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-        [idBaru('il_'), inv.id, it.jenis === 'obat' ? 'obat' : 'bmhp', it.id,
+        [idBaru('il_'), inv.id, JENIS_ITEM.indexOf(it.jenis) >= 0 ? it.jenis : 'bmhp', it.id,
          it.nama, qty, it.satuan, Number(it.harga_jual), qty * Number(it.harga_jual), urut++]
       );
     }
@@ -2132,7 +2193,7 @@ async function revenueSummary({ from, to } = {}) {
     `SELECT l.nama, COALESCE(SUM(l.jumlah), 0)::int AS total,
             COALESCE(SUM(l.qty), 0)::int AS qty
      FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id
-     WHERE ${whereInv} AND l.jenis IN ('obat', 'bmhp')
+     WHERE ${whereInv} AND l.jenis IN ('obat', 'bmhp', 'dressing', 'alkes')
      GROUP BY l.nama ORDER BY total DESC LIMIT 10`,
     nInv
   )).rows;

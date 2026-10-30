@@ -73,7 +73,7 @@ export default function RevenuePage() {
           </div>
         </div>
         <div className="page-head__actions">
-          <button className="btn" onClick={() => nav('/')}>← Dashboard</button>
+          <button className="btn" onClick={() => nav('/')}>Dashboard</button>
           <button className="btn" onClick={muat} disabled={loading}>{loading ? 'Memuat…' : 'Muat Ulang'}</button>
         </div>
       </div>
@@ -193,7 +193,7 @@ export default function RevenuePage() {
                       <tbody>
                         {byJenis.map(j => (
                           <tr key={j.jenis}>
-                            <td>{j.jenis === 'obat' ? 'Obat' : j.jenis === 'bmhp' ? 'BMHP' : j.jenis === 'tindakan' ? 'Tindakan' : j.jenis}</td>
+                            <td>{j.jenis === 'obat' ? 'Obat' : j.jenis === 'bmhp' ? 'BMHP' : j.jenis === 'tindakan' ? 'Tindakan' : j.jenis === 'dressing' ? 'Dressing' : j.jenis === 'alkes' ? 'Alkes' : j.jenis}</td>
                             <td className="num-cell">{rupiah(j.total)}</td>
                           </tr>
                         ))}

@@ -21,7 +21,7 @@
 
    INFERENSI SCOPE (awalan path):
        identity.*  mrNumber            → patient
-       wound.*  winner.*  photos.*  date  time  dressing.*  frozen  → visit
+       wound.*  winner.*  cppt.*  pemeriksaan.*  photos.*  date  time  dressing.*  frozen  → visit
    Sisanya default ke patient; apa pun bisa di-override dengan prop `scope`.
    ========================================================== */
 
@@ -47,7 +47,7 @@ export function setPath(obj, path, value) {
   ref[keys[keys.length - 1]] = value;
 }
 
-const VISIT_PREFIX = ['wound', 'winner', 'photos', 'dressing', 'date', 'time', 'frozen', 'keluhan', 'perawat'];
+const VISIT_PREFIX = ['wound', 'winner', 'cppt', 'pemeriksaan', 'photos', 'dressing', 'date', 'time', 'frozen', 'keluhan', 'perawat'];
 
 /** Tentukan scope dari path; `explicit` menang kalau diberikan. */
 export function scopeOf(path, explicit) {

@@ -102,6 +102,11 @@ function gantiSandi() {
 function UserMenu({ user, unsynced, onLogout }) {
   const [buka, setBuka] = useState(false);
   const nav = useNavigate();
+  useEffect(() => {
+    const tutup = () => setBuka(false);
+    document.addEventListener('click', tutup);
+    return () => document.removeEventListener('click', tutup);
+  }, []);
   if (!user) return null;
 
   const admin = user.peran === 'Admin';
@@ -155,28 +160,16 @@ function UserMenu({ user, unsynced, onLogout }) {
 }
 
 function Header() {
-  const { clinic, user, unsynced, logout } = useData();
-
-  useEffect(() => {
-    const tutup = () => document.querySelector('.user-menu-wrap > .user-chip')?.classList.remove('is-open');
-    document.addEventListener('click', tutup);
-    return () => document.removeEventListener('click', tutup);
-  }, []);
+  const { clinic } = useData();
+  const nav = useNavigate();
 
   return (
-    <header className="app-header">
-      <Brand clinic={clinic} />
-      {/* Pencarian TIDAK lagi di navbar.
-         Alasannya terukur: pada ponsel, kotak search di navbar memaksa
-         header jadi tiga baris (brand+tombol, chip, kotak cari) —
-         hampir seperempat tinggi layar untuk navigasi saja. Di desktop
-         navbar jadi tiga kali tinggi isinya hanya untuk satu kotak.
-
-         Kotaknya kini milik halaman Daftar Pasien (lihat
-         routes/PatientListPage.jsx), tepat di bawah judul. Satu tempat,
-         semua perangkat, tidak pernah ada dobel. */}
+    <header className="app-header app-header--content">
+      <button type="button" className="app-header__page-brand" onClick={() => nav('/')} title="Ke dashboard">
+        <span className="app-header__clinic">{clinic.nama || 'WoundCare EHR'}</span>
+        <span className="app-header__subtitle">Rekam Medis &amp; Manajemen Klinis Perawatan Luka</span>
+      </button>
       <div className="app-header__spacer"></div>
-      <UserMenu user={user} unsynced={unsynced} onLogout={logout} />
     </header>
   );
 }
@@ -228,24 +221,26 @@ function PatientPage() {
     let berhenti = false;
     patient.visits.forEach(v => {
       ['before', 'after'].forEach(k => {
-        const s = Photos.srcOf(v.photos && v.photos[k]);
-        if (!s || s.slice(0, 5) === 'data:') return;
-        let id = null;
-        try { id = new URL(s, location.origin).searchParams.get('id'); } catch (e) {}
-        if (!id || window.FOTO_CACHE[id]) return;
-        fetch(s, { credentials: 'same-origin' })
-          .then(r => (r.ok ? r.blob() : null))
-          .then(b => {
-            if (!b || berhenti) return;
-            return new Promise(res => {
-              const fr = new FileReader();
-              fr.onload = () => res(fr.result);
-              fr.onerror = () => res(null);
-              fr.readAsDataURL(b);
-            });
-          })
-          .then(d => { if (d) window.FOTO_CACHE[id] = d; })
-          .catch(() => {});
+        Photos.list(v.photos, k).forEach(foto => {
+          const s = Photos.srcOf(foto);
+          if (!s || s.slice(0, 5) === 'data:') return;
+          let id = null;
+          try { id = new URL(s, location.origin).searchParams.get('id'); } catch (e) {}
+          if (!id || window.FOTO_CACHE[id]) return;
+          fetch(s, { credentials: 'same-origin' })
+            .then(r => (r.ok ? r.blob() : null))
+            .then(b => {
+              if (!b || berhenti) return;
+              return new Promise(res => {
+                const fr = new FileReader();
+                fr.onload = () => res(fr.result);
+                fr.onerror = () => res(null);
+                fr.readAsDataURL(b);
+              });
+            })
+            .then(d => { if (d) window.FOTO_CACHE[id] = d; })
+            .catch(() => {});
+        });
       });
     });
     return () => { berhenti = true; };
@@ -346,8 +341,8 @@ function PatientPage() {
      menyala padahal isinya belum lengkap. Centang palsu di berkas rekam
      medis bukan cacat tampilan, tapi keterangan yang menyesatkan.
 
-     Langkah 3, 4, 5 mengikuti KUNJUNGAN AKTIF — ketiganya memang mengedit
-     kunjungan. Langkah 1, 2, 6 milik pasien dan tidak berpindah saat
+     Langkah 3–7 mengikuti KUNJUNGAN AKTIF — semuanya mengedit
+     kunjungan. Langkah 1 dan 2 milik pasien dan tidak berpindah saat
      kunjungan diganti. */
   const langkahTerisi = (() => {
     const id = patient.identity || {};
@@ -375,7 +370,21 @@ function PatientPage() {
       /* 5. WINNER Scale — skor kunjungan ini sudah dihitung. */
       winner: !!(visit && visit.winner && visit.winner.total != null),
 
-      /* 6. Grafik Tren — butuh dua titik atau lebih untuk bisa digambar. */
+      /* 6. Pemeriksaan Penunjang — ada hasil lab/radiologi yang diisi. */
+      pemeriksaan: !!(visit && visit.pemeriksaan && ['laboratorium', 'radiologi'].some(jenis =>
+        Object.values(visit.pemeriksaan[jenis] || {}).some(entry =>
+          entry && entry.dihapus !== true && Object.entries(entry).some(([key, value]) =>
+            key !== 'dihapus' && key !== 'dibuat' && String(value == null ? '' : value).trim() !== ''
+          )
+        )
+      )),
+
+      /* 7. CPPT — catatan kunjungan ini berisi setidaknya satu bagian. */
+      cppt: !!(visit && visit.cppt && Object.values(visit.cppt).some(value =>
+        Array.isArray(value) ? value.length > 0 : String(value == null ? '' : value).trim() !== ''
+      )),
+
+      /* 8. Grafik Tren — butuh dua titik atau lebih untuk bisa digambar. */
       grafik: Store.summarize(patient).scored.length >= 2
     };
   })();
@@ -466,8 +475,10 @@ function PatientPage() {
         const urls = [];
         (patient.visits || []).forEach(v => {
           ['before', 'after'].forEach(k => {
-            const s = Photos.srcOf(v.photos && v.photos[k]);
-            if (s && s.slice(0, 5) !== 'data:') urls.push(s);
+            Photos.list(v.photos, k).forEach(foto => {
+              const s = Photos.srcOf(foto);
+              if (s && s.slice(0, 5) !== 'data:') urls.push(s);
+            });
           });
         });
         return urls.length ? (
@@ -515,27 +526,71 @@ export default function App() {
   const match = /^\/p\/([^/?]+)/.exec(pathname);
   const [params] = useSearchParams();
   const visitId = params.get('v');
-
   usePrintState({
     view: match ? 'patient' : 'list',
     patientId: match ? match[1] : null,
     visitId: match ? visitId : null
   });
 
+  const { clinic, user, unsynced, logout } = useData();
+  const nav = useNavigate();
+  const isAdmin = !!(user && user.peran === 'Admin');
+
+  const halaman = [
+    { to: '/', icon: 'activity', label: 'Dashboard' },
+    { to: '/pasien', icon: 'user', label: 'Mitra' },
+    { to: '/kasir', icon: 'receipt', label: 'Kasir & Invoice' },
+    { to: '/persediaan', icon: 'box', label: 'Produk & Stok' }
+  ];
+  if (isAdmin) {
+    halaman.push(
+      { to: '/omset', icon: 'wallet', label: 'Omset' },
+      { to: '/pengaturan', icon: 'database', label: 'Pengaturan' }
+    );
+  }
+
   return (
-    <>
-      <Header />
-      <Routes>
-        <Route path="/" element={<DashboardPage />} />
-        <Route path="/pasien" element={<PatientListPage />} />
-        <Route path="/pasien-baru" element={<NewPatientPage />} />
-        <Route path="/p/:patientId" element={<PatientPage />} />
-        <Route path="/pengaturan" element={<SettingsPage />} />
-        <Route path="/kasir" element={<BillingPage />} />
-        <Route path="/persediaan" element={<InventoryPage />} />
-        <Route path="/omset" element={<RevenuePage />} />
-        <Route path="*" element={<DashboardPage />} />
-      </Routes>
-    </>
+    <div className="app-shell">
+      <aside className="app-sidebar" aria-label="Navigasi utama">
+        <div className="app-sidebar__brand"><Brand clinic={clinic} /></div>
+        <nav className="app-sidebar__nav">
+          {halaman.map(item => {
+            const aktif = item.to === '/'
+              ? pathname === '/'
+              : pathname === item.to || pathname.startsWith(item.to + '/');
+            return (
+              <button
+                key={item.to}
+                type="button"
+                className={`app-sidebar__item${aktif ? ' is-active' : ''}`}
+                aria-current={aktif ? 'page' : undefined}
+                onClick={() => nav(item.to)}
+              >
+                <Icon name={item.icon} size={18} className="app-sidebar__ico" />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+        <div className="app-sidebar__bottom">
+          <UserMenu user={user} unsynced={unsynced} onLogout={logout} />
+        </div>
+      </aside>
+
+      <div className="app-main">
+        <Header />
+        <Routes>
+          <Route path="/" element={<DashboardPage />} />
+          <Route path="/pasien" element={<PatientListPage />} />
+          <Route path="/pasien-baru" element={<NewPatientPage />} />
+          <Route path="/p/:patientId" element={<PatientPage />} />
+          <Route path="/pengaturan" element={<SettingsPage />} />
+          <Route path="/kasir" element={<BillingPage />} />
+          <Route path="/persediaan" element={<InventoryPage />} />
+          <Route path="/omset" element={<RevenuePage />} />
+          <Route path="*" element={<DashboardPage />} />
+        </Routes>
+      </div>
+    </div>
   );
 }

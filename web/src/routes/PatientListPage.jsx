@@ -1,5 +1,6 @@
 /* Daftar pasien aktif + ringkasan statistik. */
 
+import { useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../core/data.jsx';
@@ -11,6 +12,7 @@ export default function PatientListPage() {
   const { patients } = useData();
   const nav = useNavigate();
   const [params, setParams] = useSearchParams();
+  const searchRef = useRef(null);
   const q = params.get('q') || '';
 
   /* Kotak cari milik halaman ini, bukan header.
@@ -32,6 +34,11 @@ export default function PatientListPage() {
     PrintDoc.print({});
   }
 
+  function bukaPasienLama() {
+    searchRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    window.setTimeout(() => searchRef.current?.focus({ preventScroll: true }), 250);
+  }
+
   return (
     <main className="view" id="view-list">
       {/*
@@ -51,22 +58,40 @@ export default function PatientListPage() {
         <div className="page-head__actions">
           <button className="btn" onClick={() => nav('/')}>← Dashboard</button>
           <button className="btn" onClick={cetakDaftar} title="Cetak seluruh daftar pasien aktif">Cetak Daftar Pasien</button>
-          <button className="btn btn--primary" onClick={() => nav('/pasien-baru')}>+ Tambah Pasien</button>
         </div>
       </div>
 
-      {/* Pencarian — SEBELUM kartu statistik, bukan di atas kartu "Daftar
-          Pasien Aktif". Alasannya terukur: pada 390px keempat kartu
-          statistik memakan 437px vertikal, sehingga kotak yang diletakkan
-          tepat di atas kartu daftar jatuh di y=654 — jauh di bawah lipatan
-          layar 844px. Di y=200 kotak ini masih terlihat; di y=654 sudah
-          tidak, dan perawat harus menggulir untuk menemukannya. */}
+      <section className="patient-entry-options" aria-label="Pilih alur pasien">
+        <article className="patient-entry-option">
+          <div className="patient-entry-option__mark" aria-hidden="true">＋</div>
+          <div className="patient-entry-option__content">
+            <h2>Pasien Baru</h2>
+            <p>Daftarkan pasien dan lengkapi identitas serta informasi kesehatannya.</p>
+          </div>
+          <button className="btn btn--primary" type="button" onClick={() => nav('/pasien-baru')}>
+            Isi Identitas Pasien
+          </button>
+        </article>
+        <article className="patient-entry-option">
+          <div className="patient-entry-option__mark patient-entry-option__mark--old" aria-hidden="true">↗</div>
+          <div className="patient-entry-option__content">
+            <h2>Pasien Lama</h2>
+            <p>Cari dan buka rekam medis pasien yang sudah tersimpan.</p>
+          </div>
+          <button className="btn" type="button" onClick={bukaPasienLama}>
+            Buka Rekam Medis
+          </button>
+        </article>
+      </section>
+
+      {/* Pencarian pasien lama tetap menggunakan daftar dan rekam medis tersimpan. */}
       <div className="search-inline">
         <input
+          ref={searchRef}
           type="search"
           value={q}
           onChange={cari}
-          placeholder="Cari nama, no. RM, NIK, atau telepon…"
+          placeholder="Cari pasien lama: nama, no. RM, NIK, atau telepon…"
           aria-label="Cari pasien"
         />
       </div>

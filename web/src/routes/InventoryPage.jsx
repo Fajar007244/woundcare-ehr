@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../core/data.jsx';
 import { UI, API } from '../lib/index.js';
@@ -9,10 +9,16 @@ import '../styles/inventory.css';
 
 function rupiah(n) { return 'Rp ' + Number(n || 0).toLocaleString('id-ID'); }
 function angka(n) { return Number(n || 0).toLocaleString('id-ID'); }
-function labelJenis(j) { return j === 'bmhp' ? 'BMHP' : 'Obat'; }
+function labelJenis(j) { const m = { dressing: 'Dressing', alkes: 'Alkes', bmhp: 'BMHP', obat: 'Obat' }; return m[j] || j; }
+
+/* Awalan kode barang per jenis: obat OBT-, BMHP BMH-, dressing DRS-, alkes ALK-. */
+function prefixKode(j) {
+  const m = { obat: 'OBT', bmhp: 'BMH', dressing: 'DRS', alkes: 'ALK' };
+  return m[j] || 'BRG';
+}
 
 export default function InventoryPage() {
-  const { user, patients } = useData();
+  const { user } = useData();
   const nav = useNavigate();
   const isAdmin = !!(user && user.peran === 'Admin');
 
@@ -24,11 +30,6 @@ export default function InventoryPage() {
   const [jenis, setJenis] = useState('all');
   const [lowOnly, setLowOnly] = useState(false);
 
-  const [usageOpen, setUsageOpen] = useState(false);
-  const [usagePatientId, setUsagePatientId] = useState('');
-  const [usageVisitId, setUsageVisitId] = useState('');
-  const [usageLines, setUsageLines] = useState([{ itemId: '', qty: 1 }]);
-  const [usageBusy, setUsageBusy] = useState(false);
 
   async function muat() {
     setLoading(true);
@@ -60,7 +61,20 @@ export default function InventoryPage() {
   const totalNilai = (items || []).reduce((a, it) => a + Number(it.stok || 0) * Number(it.harga_beli || 0), 0);
   const lowCount = (items || []).filter(it => Number(it.stok) <= Number(it.stok_min)).length;
 
-  const activeItems = (items || []).filter(it => Number(it.aktif) === 1);
+  /* Kode berikutnya untuk satu jenis: OBT-001, OBT-002, ...
+     Nomor diambil dari kode terbesar yang sudah ada pada jenis itu saja,
+     jadi menambah BMHP tidak memakai nomor milik obat. */
+  function kodeOtomatis(jenis) {
+    const prefix = prefixKode(jenis) + '-';
+    let terbesar = 0;
+    (items || []).forEach(it => {
+      const kode = String(it.kode || '');
+      if (!kode.startsWith(prefix)) return;
+      const n = parseInt(kode.slice(prefix.length), 10);
+      if (Number.isFinite(n) && n > terbesar) terbesar = n;
+    });
+    return prefix + String(terbesar + 1).padStart(3, '0');
+  }
 
   function bukaFormBarang(it) {
     let m;
@@ -87,11 +101,10 @@ export default function InventoryPage() {
         UI.toast((e && e.message) || 'Gagal menyimpan barang.', 'danger');
       }
     };
-    const jenisOpts = ['obat', 'bmhp'].map(j =>
+    const jenisOpts = ['obat', 'bmhp', 'dressing', 'alkes'].map(j =>
       `<option value="${j}"${(it && it.jenis === j) || (!it && j === 'obat') ? ' selected' : ''}>${labelJenis(j)}</option>`
     ).join('');
-    m = UI.modal({
-      title: it ? 'Ubah Barang' : 'Tambah Barang',
+    m = UI.modal({          title: it ? 'Ubah Produk / Barang' : 'Tambah Produk / Barang',
       body: `
         <div class="form-row form-row--2">
           <div class="field">
@@ -100,12 +113,12 @@ export default function InventoryPage() {
           </div>
           <div class="field">
             <label class="field__label" for="it-kode">Kode</label>
-            <input type="text" id="it-kode" value="${UI.esc(it ? it.kode || '' : '')}">
+            <input type="text" id="it-kode" value="${UI.esc(it ? it.kode || '' : kodeOtomatis('obat'))}"${it ? '' : ' readonly'}>
           </div>
         </div>
         <div class="form-row form-row--2" style="margin-top:12px">
           <div class="field">
-            <label class="field__label" for="it-jenis">Jenis</label>
+            <label class="field__label" for="it-jenis">Jenis Produk / Barang</label>
             <select id="it-jenis">${jenisOpts}</select>
           </div>
           <div class="field">
@@ -118,8 +131,7 @@ export default function InventoryPage() {
             <label class="field__label" for="it-hb">Harga Beli</label>
             <input type="number" id="it-hb" value="${it ? Number(it.harga_beli || 0) : 0}" min="0">
           </div>
-          <div class="field">
-            <label class="field__label" for="it-hj">Harga Jual</label>
+          <div class="field">              <label class="field__label" for="it-hj">Harga Jual (untuk Invoice)</label>
             <input type="number" id="it-hj" value="${it ? Number(it.harga_jual || 0) : 0}" min="0">
           </div>
           <div class="field">
@@ -137,6 +149,15 @@ export default function InventoryPage() {
         UI.el('button', { class: 'btn btn--primary', text: 'Simpan', onclick: simpan })
       ]
     });
+    /* Barang baru: kode mengikuti jenis yang dipilih. Barang lama dibiarkan
+       memakai kodenya sendiri supaya riwayat stok & invoice tidak berubah. */
+    if (!it) {
+      const selJenis = m.root.querySelector('#it-jenis');
+      const inpKode = m.root.querySelector('#it-kode');
+      if (selJenis && inpKode) {
+        selJenis.addEventListener('change', () => { inpKode.value = kodeOtomatis(selJenis.value); });
+      }
+    }
   }
 
   async function nonaktifkan(it) {
@@ -200,7 +221,7 @@ export default function InventoryPage() {
   async function bukaRiwayat(it) {
     const m = UI.modal({
       title: `Riwayat Stok — ${it.nama}`,
-      body: `<p class="field__hint">Memuat…</p>`,
+      body: `<p class="field__hint">Memuat...</p>`,
       footer: [UI.el('button', { class: 'btn', text: 'Tutup', onclick: () => m.close() })]
     });
     try {
@@ -216,8 +237,8 @@ export default function InventoryPage() {
           <td><span class="badge badge--muted">${UI.esc(mv.jenis)}</span></td>
           <td class="num-cell">${angka(mv.jumlah)}</td>
           <td class="num-cell">${angka(mv.stok_akhir)}</td>
-          <td style="font-size:12px">${UI.esc(mv.alasan || '—')}</td>
-          <td style="font-size:12px">${UI.esc(mv.oleh_nama || '—')}</td>
+          <td style="font-size:12px">${UI.esc(mv.alasan || '?')}</td>
+          <td style="font-size:12px">${UI.esc(mv.oleh_nama || '?')}</td>
         </tr>
       `).join('');
       m.body.innerHTML = `
@@ -238,89 +259,29 @@ export default function InventoryPage() {
     }
   }
 
-  function bukaPemakaian() {
-    setUsagePatientId('');
-    setUsageVisitId('');
-    setUsageLines([{ itemId: '', qty: 1 }]);
-    setUsageOpen(true);
-  }
-
-  const selectedPatient = (patients || []).find(p => p.id === usagePatientId) || null;
-  const visitsOfPatient = selectedPatient ? (selectedPatient.visits || []) : [];
-
-  function updateLine(i, patch) {
-    setUsageLines(prev => prev.map((l, idx) => idx === i ? { ...l, ...patch } : l));
-  }
-  function addLine() { setUsageLines(prev => [...prev, { itemId: '', qty: 1 }]); }
-  function removeLine(i) { setUsageLines(prev => prev.filter((_, idx) => idx !== i)); }
-
-  async function submitUsage() {
-    const lines = usageLines
-      .filter(l => l.itemId)
-      .map(l => ({ itemId: l.itemId, qty: Number(l.qty) || 0 }))
-      .filter(l => l.qty > 0);
-    if (!lines.length) { UI.toast('Pilih minimal satu barang.', 'warn'); return; }
-    if (!usageVisitId) { UI.toast('Pilih kunjungan pasien.', 'warn'); return; }
-    setUsageBusy(true);
-    try {
-      const r = await API.confirmUsage({
-        visitId: usageVisitId,
-        patientId: usagePatientId,
-        patientNama: selectedPatient && selectedPatient.identity ? (selectedPatient.identity.nama || '') : '',
-        lines
-      });
-      setUsageOpen(false);
-      const noInv = r && r.invoice ? r.invoice.nomor : '';
-      UI.toast(
-        noInv
-          ? `Pemakaian dicatat. Invoice ${noInv} terbentuk, stok berkurang.`
-          : 'Pemakaian dicatat, stok berkurang.',
-        'ok'
-      );
-      muat();
-    } catch (e) {
-      const msg = (e && e.message) || 'Gagal mencatat pemakaian.';
-      UI.toast(msg, 'danger');
-    } finally {
-      setUsageBusy(false);
-    }
-  }
-
-  useEffect(() => {
-    if (!usageOpen) return;
-    const onKey = (e) => { if (e.key === 'Escape') setUsageOpen(false); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [usageOpen]);
-
   return (
     <main className="view" id="view-inventory">
       <div className="page-head page-head--hero">
         <div className="page-head__lead">
           <span className="page-head__icon"><Icon name="box" size={22} /></span>
           <div className="page-head__text">
-            <h1>Persediaan</h1>
-            <p className="page-head__sub">Obat dan BMHP: stok, harga, dan pemakaian per kunjungan.</p>
+            <h1>Produk &amp; Stok</h1>
+            <p className="page-head__sub">Kelola obat, BMHP, dressing, dan alkes beserta harga dan stoknya.</p>
           </div>
         </div>
         <div className="page-head__actions">
-          <button className="btn" onClick={() => nav('/')}>← Dashboard</button>
+          <button className="btn" onClick={() => nav('/')}>Dashboard</button>
           <button className="btn" onClick={muat} disabled={loading}>
-            {loading ? 'Memuat…' : 'Muat Ulang'}
+            {loading ? 'Memuat...' : 'Muat Ulang'}
           </button>
           {isAdmin ? (
             <button className="btn" onClick={() => openFinanceLog('persediaan')} title="Lihat riwayat perubahan">
               Riwayat
             </button>
           ) : null}
-          <button className="btn btn--primary" onClick={bukaPemakaian}>
-            Catat Pemakaian
+          <button className="btn btn--primary" onClick={() => bukaFormBarang(null)}>
+            + Tambah Barang
           </button>
-          {isAdmin ? (
-            <button className="btn btn--primary" onClick={() => bukaFormBarang(null)}>
-              + Tambah Barang
-            </button>
-          ) : null}
         </div>
       </div>
 
@@ -328,12 +289,12 @@ export default function InventoryPage() {
         <div className="stat stat--primary">
           <div className="stat__label">Jenis Barang</div>
           <div className="stat__value">{angka(totalJenis)}</div>
-          <div className="stat__foot">obat &amp; BMHP terdaftar</div>
+          <div className="stat__foot">barang terdaftar</div>
         </div>
         <div className="stat">
           <div className="stat__label">Total Nilai Stok</div>
           <div className="stat__value" style={{ fontSize: 18 }}>{rupiah(totalNilai)}</div>
-          <div className="stat__foot">stok × harga beli</div>
+          <div className="stat__foot">stok x harga beli</div>
         </div>
         <div className={`stat ${lowCount > 0 ? 'stat--warn' : ''}`}>
           <div className="stat__label">Stok Rendah</div>
@@ -348,12 +309,12 @@ export default function InventoryPage() {
             type="search"
             value={q}
             onChange={e => setQ(e.target.value)}
-            placeholder="Cari nama atau kode barang…"
+            placeholder="Cari nama atau kode barang..."
             aria-label="Cari barang"
           />
         </div>
         <div className="inv-filters">
-          {['all', 'obat', 'bmhp'].map(j => (
+          {['all', 'obat', 'bmhp', 'dressing', 'alkes'].map(j => (
             <button
               key={j}
               type="button"
@@ -371,7 +332,7 @@ export default function InventoryPage() {
       </div>
 
       {loading && items === null ? (
-        <div className="field__hint">Memuat persediaan…</div>
+        <div className="field__hint">Memuat persediaan...</div>
       ) : null}
       {err ? (
         <Callout tone="danger">
@@ -384,7 +345,7 @@ export default function InventoryPage() {
         <EmptyState
           icon={<Icon name="box" size={34} />}
           title={items.length ? 'Tidak ada barang yang cocok' : 'Belum ada barang'}
-          actions={isAdmin ? <button className="btn btn--primary" onClick={() => bukaFormBarang(null)}>+ Tambah Barang</button> : null}
+          actions={<button className="btn btn--primary" onClick={() => bukaFormBarang(null)}>+ Tambah Barang</button>}
         >
           {items.length ? 'Coba ubah filter atau kata kunci.' : 'Mulai dengan menambahkan barang pertama.'}
         </EmptyState>
@@ -404,7 +365,7 @@ export default function InventoryPage() {
                   <th className="num-cell">Min</th>
                   <th className="num-cell">Harga Jual</th>
                   <th>Status</th>
-                  {isAdmin ? <th></th> : null}
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -412,13 +373,13 @@ export default function InventoryPage() {
                   const low = Number(it.stok) <= Number(it.stok_min);
                   return (
                     <tr key={it.id} className={low ? 'inv-row--low' : ''}>
-                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{it.kode || '—'}</td>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{it.kode || '?'}</td>
                       <td>
                         <strong>{it.nama}</strong>
                         {it.catatan ? <div style={{ fontSize: 11, color: 'var(--c-text-muted)' }}>{it.catatan}</div> : null}
                       </td>
                       <td>{labelJenis(it.jenis)}</td>
-                      <td>{it.satuan || '—'}</td>
+                      <td>{it.satuan || '?'}</td>
                       <td className="num-cell">{angka(it.stok)}</td>
                       <td className="num-cell">{angka(it.stok_min)}</td>
                       <td className="num-cell">{rupiah(it.harga_jual)}</td>
@@ -431,22 +392,16 @@ export default function InventoryPage() {
                           <Badge tone="ok">Aktif</Badge>
                         )}
                       </td>
-                      {isAdmin ? (
-                        <td style={{ whiteSpace: 'nowrap' }}>
-                          <div className="row-actions">
-                            <button className="btn btn--sm btn--ghost" onClick={() => bukaFormBarang(it)}>Ubah</button>
-                            <button className="btn btn--sm btn--ghost" onClick={() => bukaStok(it)}>Stok</button>
-                            <button className="btn btn--sm btn--ghost" onClick={() => bukaRiwayat(it)}>Riwayat</button>
-                            {Number(it.aktif) === 1 ? (
-                              <button className="btn btn--sm btn--danger" onClick={() => nonaktifkan(it)}>Nonaktifkan</button>
-                            ) : null}
-                          </div>
-                        </td>
-                      ) : (
-                        <td style={{ whiteSpace: 'nowrap' }}>
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        <div className="row-actions">
+                          <button className="btn btn--sm btn--ghost" onClick={() => bukaFormBarang(it)}>Ubah</button>
+                          <button className="btn btn--sm btn--ghost" onClick={() => bukaStok(it)}>Stok</button>
                           <button className="btn btn--sm btn--ghost" onClick={() => bukaRiwayat(it)}>Riwayat</button>
-                        </td>
-                      )}
+                          {Number(it.aktif) === 1 ? (
+                            <button className="btn btn--sm btn--danger" onClick={() => nonaktifkan(it)}>Nonaktifkan</button>
+                          ) : null}
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
@@ -462,7 +417,7 @@ export default function InventoryPage() {
                   <div className="inv-card__head">
                     <div>
                       <div className="inv-card__title">{it.nama}</div>
-                      <div className="inv-card__code">{it.kode || '—'} · {labelJenis(it.jenis)}</div>
+                      <div className="inv-card__code">{it.kode || '?'} - {labelJenis(it.jenis)}</div>
                     </div>
                     {Number(it.aktif) !== 1 ? (
                       <Badge tone="muted">Nonaktif</Badge>
@@ -480,14 +435,10 @@ export default function InventoryPage() {
                   </div>
                   <div className="inv-card__actions">
                     <button className="btn btn--sm btn--ghost" onClick={() => bukaRiwayat(it)}>Riwayat</button>
-                    {isAdmin ? (
-                      <>
-                        <button className="btn btn--sm btn--ghost" onClick={() => bukaFormBarang(it)}>Ubah</button>
-                        <button className="btn btn--sm btn--ghost" onClick={() => bukaStok(it)}>Stok</button>
-                        {Number(it.aktif) === 1 ? (
-                          <button className="btn btn--sm btn--danger" onClick={() => nonaktifkan(it)}>Nonaktifkan</button>
-                        ) : null}
-                      </>
+                    <button className="btn btn--sm btn--ghost" onClick={() => bukaFormBarang(it)}>Ubah</button>
+                    <button className="btn btn--sm btn--ghost" onClick={() => bukaStok(it)}>Stok</button>
+                    {Number(it.aktif) === 1 ? (
+                      <button className="btn btn--sm btn--danger" onClick={() => nonaktifkan(it)}>Nonaktifkan</button>
                     ) : null}
                   </div>
                 </div>
@@ -497,71 +448,6 @@ export default function InventoryPage() {
         </>
       ) : null}
 
-      {usageOpen ? (
-        <div className="modal-backdrop" onMouseDown={(e) => { if (e.target.classList.contains('modal-backdrop')) setUsageOpen(false); }}>
-          <div className="modal modal--wide" onClick={(e) => e.stopPropagation()}>
-            <div className="modal__head">
-              <h2>Catat Pemakaian</h2>
-              <button className="modal__x" onClick={() => setUsageOpen(false)}>&times;</button>
-            </div>
-            <div className="modal__body">
-              <div className="form-row form-row--2">
-                <div className="field">
-                  <label className="field__label">Pasien</label>
-                  <select value={usagePatientId} onChange={e => { setUsagePatientId(e.target.value); setUsageVisitId(''); }}>
-                    <option value="">— Pilih pasien —</option>
-                    {(patients || []).map(p => (
-                      <option key={p.id} value={p.id}>{p.identity && p.identity.nama ? p.identity.nama : p.id}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="field">
-                  <label className="field__label">Kunjungan</label>
-                  <select value={usageVisitId} onChange={e => setUsageVisitId(e.target.value)} disabled={!selectedPatient}>
-                    <option value="">— Pilih kunjungan —</option>
-                    {visitsOfPatient.map(v => (
-                      <option key={v.id} value={v.id}>
-                        {v.date ? new Date(v.date).toLocaleDateString('id-ID') : v.id}{v.time ? ' ' + v.time : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div style={{ marginTop: 14 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <strong style={{ fontSize: 13 }}>Barang yang dipakai</strong>
-                  <button className="btn btn--sm btn--ghost" onClick={addLine}>+ Baris</button>
-                </div>
-                {usageLines.map((line, i) => (
-                  <div key={i} className="inv-usage-line">
-                    <div className="field" style={{ margin: 0 }}>
-                      <select value={line.itemId} onChange={e => updateLine(i, { itemId: e.target.value })}>
-                        <option value="">— Pilih barang —</option>
-                        {activeItems.map(it => (
-                          <option key={it.id} value={it.id}>
-                            {it.nama} ({it.kode || it.id}) — stok {angka(it.stok)}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="field" style={{ margin: 0 }}>
-                      <input type="number" min="1" value={line.qty} onChange={e => updateLine(i, { qty: e.target.value })} />
-                    </div>
-                    <button className="btn btn--sm btn--danger" onClick={() => removeLine(i)} disabled={usageLines.length <= 1}>×</button>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="modal__foot">
-              <button className="btn" onClick={() => setUsageOpen(false)} disabled={usageBusy}>Batal</button>
-              <button className="btn btn--primary" onClick={submitUsage} disabled={usageBusy}>
-                {usageBusy ? 'Menyimpan…' : 'Simpan Pemakaian'}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </main>
   );
 }

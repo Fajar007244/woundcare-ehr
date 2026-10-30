@@ -12,85 +12,90 @@ const Scales = (() => {
 
   /* ---------- 10 aspek WINNER Scale (urutan baku) ---------- */
   const ITEMS = [
+    /* Enam aspek pertama mengikuti formulir RM. 03.1 PENGKAJIAN LUKA
+       (Wocare Center, Bogor) apa adanya: rentang, urutan, dan istilahnya
+       disalin dari formulir resmi, bukan ditafsirkan ulang. */
     { key: 'size', label: 'Ukuran Luka', en: 'Size',
       anchors: {
-        1: 'Sangat kecil, < 0,5 cm2',
-        2: 'Kecil, 0,5 - 1 cm2',
-        3: 'Sedang, 1 - 4 cm2',
-        4: 'Besar, 4 - 16 cm2',
-        5: 'Sangat besar, > 16 cm2'
+        1: 'P × L < 4 cm',
+        2: 'P × L 4 – < 16 cm',
+        3: 'P × L 16 – < 36 cm',
+        4: 'P × L 36 – < 80 cm',
+        5: 'P × L > 80 cm'
       } },
     { key: 'depth', label: 'Kedalaman Luka', en: 'Depth',
       anchors: {
-        1: 'Stage 1, superfisial (hanya dermis)',
-        2: 'Melampaui dermis',
-        3: 'Mencapai otot / tendon',
-        4: 'Mencapai tulang',
-        5: 'Nekrosis luas / tidak dapat dinilai'
+        1: 'Stage 1',
+        2: 'Stage 2',
+        3: 'Stage 3',
+        4: 'Stage 4',
+        5: 'Necrosis wound'
       } },
     { key: 'edges', label: 'Tepi Luka', en: 'Edges',
       anchors: {
-        1: 'Tepi baik, tegas, rata',
-        2: 'Tepi jelas, sedikit meninggi',
-        3: 'Tepi mulai menggantung',
-        4: 'Fibrotik, mengeras ke jaringan sekitar',
-        5: 'Fibrotik / hiperkeratotik, rolled / everted'
+        1: 'Samar, tidak jelas terlihat',
+        2: 'Batas tepi terlihat, menyatu dengan dasar luka',
+        3: 'Jelas, tidak menyatu dengan dasar luka',
+        4: 'Jelas, tidak menyatu dengan dasar luka, tebal',
+        5: 'Jelas, fibrotik, parut tebal / hiperkeratotik'
       } },
     { key: 'undermining', label: 'Gua / Terowongan', en: 'Undermining',
       anchors: {
-        1: 'Tidak ada goa / terowongan',
-        2: 'Terowongan dangkal, < 2 mm',
-        3: 'Terowongan sedang, 2 - 6 mm',
-        4: 'Terowongan dalam, > 6 mm',
-        5: 'Terowongan luas, menembus fasia'
+        1: 'Tidak ada',
+        2: 'Goa < 2 cm di area manapun',
+        3: 'Goa 2 – 4 cm, < 50% pinggir luka',
+        4: 'Goa 2 – 4 cm, > 50% pinggir luka',
+        5: 'Goa > 4 cm di area manapun'
       } },
     { key: 'exType', label: 'Tipe Eksudat', en: 'Exudate Type',
       anchors: {
         1: 'Tidak ada',
-        2: 'Serous, jernih',
-        3: 'Serosanguinous',
-        4: 'Sanguinous, merah',
-        5: 'Purulent / abses'
+        2: 'Bloody',
+        3: 'Serosanguineous',
+        4: 'Serous',
+        5: 'Purulent'
       } },
     { key: 'exAmount', label: 'Jumlah Eksudat', en: 'Exudate Amount',
       anchors: {
-        1: 'Tidak ada',
-        2: 'Sedikit',
-        3: 'Sedang',
-        4: 'Banyak',
-        5: 'Sangat banyak, ganti dressing harian'
+        1: 'Kering',
+        2: 'Moist',
+        3: 'Sedikit',
+        4: 'Sedang',
+        5: 'Banyak'
       } },
+    /* Empat aspek terakhir mengikuti formulir RM. 03.2 PENGKAJIAN LUKA
+       (Wocare Center, Bogor). */
     { key: 'skinColor', label: 'Warna Kulit Sekitar Luka', en: 'Surrounding Skin Color',
       anchors: {
-        1: 'Normal',
-        2: 'Pink / eritema tipis',
-        3: 'Merah',
-        4: 'Gelap / kebiruan',
-        5: 'Hitam / nekrotik'
+        1: 'Pink atau normal',
+        2: 'Merah terang jika ditekan',
+        3: 'Putih atau pucat atau hipopigmentasi',
+        4: 'Merah gelap',
+        5: 'Hitam atau hiperpigmentasi'
       } },
     { key: 'edema', label: 'Jaringan Edema', en: 'Peripheral Edema',
       anchors: {
-        1: 'Tidak ada',
-        2: 'Ringan',
-        3: 'Sedang',
-        4: 'Berat',
-        5: 'Sangat berat, peau d\'orange'
+        1: 'No swelling atau edema',
+        2: 'Non pitting edema < 4 cm di sekitar luka',
+        3: 'Non pitting edema > 4 cm di sekitar luka',
+        4: 'Pitting edema < 4 cm di sekitar luka',
+        5: 'Krepitasi atau pitting edema > 4 cm'
       } },
     { key: 'granulation', label: 'Jaringan Granulasi', en: 'Granulation Tissue',
       anchors: {
-        1: 'Sehat, 100%, tanpa edema',
-        2: 'Lebih dari 75%',
-        3: '50 - 75%',
-        4: 'Kurang dari 50%',
-        5: 'Tidak ada'
+        1: 'Kulit utuh atau stage 1',
+        2: 'Terang, 100% jaringan granulasi',
+        3: 'Terang, 50% jaringan granulasi',
+        4: 'Granulasi 25%',
+        5: 'Tidak ada jaringan granulasi'
       } },
     { key: 'epithelial', label: 'Epitelisasi', en: 'Epithelialization',
       anchors: {
-        1: 'Lengkap, luka tertutup 100%',
-        2: 'Lebih dari 75%',
-        3: '50 - 75%',
-        4: 'Kurang dari 50%',
-        5: 'Tidak ada'
+        1: '100% epitelisasi',
+        2: '75% – 100% epitelisasi',
+        3: '50% – 75% epitelisasi',
+        4: '25% – 50% epitelisasi',
+        5: '< 25% epitelisasi'
       } }
   ];
 

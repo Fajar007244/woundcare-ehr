@@ -18,6 +18,8 @@ import ConsentTab from './ConsentTab.jsx';
 import PengkajianTab from './PengkajianTab.jsx';
 import FotoTab from './FotoTab.jsx';
 import WinnerTab from './WinnerTab.jsx';
+import InvestigationsTab from './InvestigationsTab.jsx';
+import CpptTab from './CpptTab.jsx';
 import GrafikTab from './GrafikTab.jsx';
 
 /* Label persis sama dengan TABS di assets/js/app.js (baris 1352-1359).
@@ -40,8 +42,10 @@ export const TAB_LIST = [
   { key: 'consent',    num: 2, label: 'Informed Consent', icon: 'fileText',    short: 'Consent' },
   { key: 'pengkajian', num: 3, label: 'Pengkajian Luka',  icon: 'activity',   short: 'Luka' },
   { key: 'foto',       num: 4, label: 'Foto Luka',        icon: 'camera',     short: 'Foto' },
-  { key: 'winner',     num: 5, label: 'WINNER Scale',     icon: 'barChart',   short: 'Skor' },
-  { key: 'grafik',     num: 6, label: 'Grafik Tren',      icon: 'trendingUp', short: 'Grafik' }
+  { key: 'winner',      num: 5, label: 'WINNER Scale',          icon: 'barChart',   short: 'Skor' },
+  { key: 'pemeriksaan', num: 6, label: 'Pemeriksaan Penunjang', icon: 'fileText',   short: 'Periksa' },
+  { key: 'cppt',        num: 7, label: 'CPPT',                  icon: 'fileText',   short: 'CPPT' },
+  { key: 'grafik',      num: 8, label: 'Grafik Tren',           icon: 'trendingUp', short: 'Grafik' }
 ];
 
 export const TABS = {
@@ -50,5 +54,7 @@ export const TABS = {
   pengkajian: PengkajianTab,
   foto: FotoTab,
   winner: WinnerTab,
+  pemeriksaan: InvestigationsTab,
+  cppt: CpptTab,
   grafik: GrafikTab
 };

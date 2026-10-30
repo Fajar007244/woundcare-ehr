@@ -125,6 +125,21 @@ const Photos = (() => {
     return Math.floor(b64.length * 3 / 4);
   }
 
+  /**
+   * Semua foto satu slot (before / after), sebagai daftar.
+   *
+   * Bentuk baru: photos[kind + 'List'] berisi SEMUA foto slot itu.
+   * Bentuk lama (dan cadangan): hanya photos[kind] berupa satu foto.
+   * Dibaca oleh tab Foto, preloader cache cetak, dan galeri —
+   * photos[kind] sendiri tetap dijaga sebagai foto pertama.
+   */
+  function list(photos, kind) {
+    const p = photos || {};
+    const arr = p[kind + 'List'];
+    if (Array.isArray(arr)) return arr.filter(Boolean);
+    return p[kind] ? [p[kind]] : [];
+  }
+
   function humanSize(bytes) {
     if (!bytes) return '0 B';
     const u = ['B', 'KB', 'MB', 'GB'];
@@ -178,5 +193,5 @@ const Photos = (() => {
   }
 
   return { compress, compressAdaptive, fromInput, srcOf, dataUrlToBlob,
-           sizeOf, humanSize, MAX_EDGE, QUALITY, WARN_BYTES };
+           sizeOf, list, humanSize, MAX_EDGE, QUALITY, WARN_BYTES };
 })();

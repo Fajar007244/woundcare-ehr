@@ -561,42 +561,49 @@ function IsiWinner({ patient, visit, rev, setRev }) {
     const w = visit.wound || {};
     const s = {};
 
-    // 1. Ukuran (luas cm2)
+    // 1. Ukuran (P × L cm) — ambang mengikuti formulir RM. 03.1
     const area = Scales.areaCm2(w.ukuran);
     s.size = area === null ? null
-      : area < 0.5 ? 1 : area < 1 ? 2 : area < 4 ? 3 : area < 16 ? 4 : 5;
+      : area < 4 ? 1 : area < 16 ? 2 : area < 36 ? 3 : area < 80 ? 4 : 5;
 
     // 2. Kedalaman
     const dep = parseFloat(w.ukuran && w.ukuran.kedalaman);
     s.depth = !isFinite(dep) ? null : dep < 0.2 ? 1 : dep < 0.5 ? 2 : dep < 1 ? 3 : dep < 2 ? 4 : 5;
 
-    // 3. Tepi
+    // 3. Tepi — urutan pilihan Pengkajian sama dengan skor 1..5 formulir
     const tepi = w.tepi || [];
-    s.edges = tepi.includes('Menyatu') ? 1
-      : tepi.includes('Menyatu') && tepi.includes('Thick / Hyperkeratosis') ? 3
-      : tepi.includes('Callus') || tepi.includes('Thick / Hyperkeratosis') ? 3
-      : tepi.includes('Evisi') ? 5
-      : tepi.includes('Maserasi') ? 4
-      : tepi.length ? 3 : null;
+    const TEPI_FORM = [
+      'Samar, tidak jelas terlihat',
+      'Batas tepi terlihat, menyatu dengan dasar luka',
+      'Jelas, tidak menyatu dengan dasar luka',
+      'Jelas, tidak menyatu dengan dasar luka, tebal',
+      'Jelas, fibrotik, parut tebal / hiperkeratotik'
+    ];
+    const iTepi = TEPI_FORM.findIndex(t => tepi.includes(t));
+    s.edges = iTepi >= 0 ? iTepi + 1 : null;
 
-    // 4. Undermining
+    // 4. Goa / terowongan — ambang cm formulir RM. 03.1
     const ud = w.undermining || {};
     const udDepth = parseFloat(ud.kedalaman);
     s.undermining = !ud.ada ? 1
       : !isFinite(udDepth) ? 3
-      : udDepth < 0.2 ? 2 : udDepth < 0.6 ? 3 : udDepth <= 1 ? 4 : 5;
+      : udDepth < 2 ? 2 : udDepth <= 4 ? 3 : 5;
 
-    // 5. Tipe eksudat
+    // 5. Tipe eksudat — urutan formulir: bloody, serosanguineous, serous, purulent
     const exTipe = w.eksudat && w.eksudat.tipe;
-    s.exType = !exTipe || w.eksudat.jumlah === 'Tidak Ada' ? 1
-      : exTipe === 'Serous' ? 2
+    s.exType = !exTipe || w.eksudat.jumlah === 'Tidak Ada' || w.eksudat.jumlah === 'Kering' ? 1
+      : exTipe === 'Sanguinous' ? 2
       : exTipe === 'Serosanguinous' ? 3
-      : exTipe === 'Sanguinous' ? 4
+      : exTipe === 'Serous' ? 4
       : exTipe === 'Purulent' ? 5 : null;
 
-    // 6. Jumlah eksudat
+    // 6. Jumlah eksudat — kering, moist, sedikit, sedang, banyak
     const exJ = w.eksudat && w.eksudat.jumlah;
-    s.exAmount = !exJ || exJ === 'Tidak Ada' ? 1 : exJ === 'Sedikit' ? 2 : exJ === 'Sedang' ? 3 : 4;
+    s.exAmount = !exJ || exJ === 'Tidak Ada' || exJ === 'Kering' ? 1
+      : exJ === 'Moist' ? 2
+      : exJ === 'Sedikit' ? 3
+      : exJ === 'Sedang' ? 4
+      : exJ === 'Banyak' ? 5 : null;
 
     // 7. Warna kulit sekitar
     const time = w.time || [];
@@ -605,14 +612,14 @@ function IsiWinner({ patient, visit, rev, setRev }) {
     // 8. Edema — tidak diukur langsung, default paling ringan yang tersedia
     s.edema = null;
 
-    // 9. Granulasi
+    // 9. Granulasi — ambang formulir RM. 03.2 (100%, 50%, 25%, tidak ada)
     const pct = k => Number(w.jaringan && w.jaringan[k]) || 0;
     const gran = pct('granulasi');
-    s.granulation = gran >= 100 ? 1 : gran > 75 ? 2 : gran >= 50 ? 3 : gran > 0 ? 4 : 5;
+    s.granulation = gran >= 100 ? 2 : gran >= 50 ? 3 : gran >= 25 ? 4 : 5;
 
     // 10. Epitelisasi
     const epi = pct('epitel');
-    s.epithelial = epi >= 100 ? 1 : epi > 75 ? 2 : epi >= 50 ? 3 : epi > 0 ? 4 : 5;
+    s.epithelial = epi >= 100 ? 1 : epi >= 75 ? 2 : epi >= 50 ? 3 : epi >= 25 ? 4 : 5;
 
     /* Simpan, jangan timpa yang sudah dinilai manual. */
     let filled = 0, kept = 0;

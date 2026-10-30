@@ -119,9 +119,16 @@ const PrintDoc = (() => {
   // Salinan lokal opsi agar modul PrintDoc mandiri
   const OPT_KOMORBID = ['Diabetes Mellitus', 'Hipertensi', 'Gagal Ginjal', 'Gagal Jantung', 'Asma / COPD', 'Hepatitis', 'Kanker', 'Lainnya'];
   const OPT_ETIOLOGI = ['Diabetes Mellitus (Diabetic Foot Ulcer)', 'Dekubitus', 'Luka Bakar', 'Venous Ulcer', 'Arterial Ulcer', 'Trauma / Post-Op', 'Lainnya'];
-  const OPT_TEPI     = ['Menyatu', 'Evisi', 'Maserasi', 'Thick / Hyperkeratosis', 'Callus', 'Macerasi + Evisi'];
-  const OPT_EKSJ     = ['Tidak Ada', 'Sedikit', 'Sedang', 'Banyak'];
-  const OPT_EKST     = ['Serous', 'Sanguinous', 'Serosanguinous', 'Purulent'];
+  /* Urutan opsi mengikuti formulir RM. 03.1 PENGKAJIAN LUKA. */
+  const OPT_TEPI     = [
+    'Samar, tidak jelas terlihat',
+    'Batas tepi terlihat, menyatu dengan dasar luka',
+    'Jelas, tidak menyatu dengan dasar luka',
+    'Jelas, tidak menyatu dengan dasar luka, tebal',
+    'Jelas, fibrotik, parut tebal / hiperkeratotik'
+  ];
+  const OPT_EKSJ     = ['Kering', 'Moist', 'Sedikit', 'Sedang', 'Banyak'];
+  const OPT_EKST     = ['Bloody', 'Serosanguineous', 'Serous', 'Purulent'];
   const OPT_BAU      = ['Tidak Berbau', 'Berbau Ringan', 'Sangat Berbau'];
   const OPT_TIME     = ['Kalor', 'Dolor', 'Rubor', 'Tumor', 'Functio Laesa'];
   const OPT_SISI     = ['Kanan', 'Kiri', 'Tengah / Bilateral'];

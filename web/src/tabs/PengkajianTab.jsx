@@ -52,11 +52,19 @@ const ETIOLOGI = ['Diabetes Mellitus (Diabetic Foot Ulcer)', 'Dekubitus', 'Luka 
 
 const SISI = ['Kanan', 'Kiri', 'Tengah / Bilateral'];
 
-const TEPI = ['Menyatu', 'Evisi', 'Maserasi', 'Thick / Hyperkeratosis', 'Callus', 'Macerasi + Evisi'];
+/* Tiga daftar di bawah disalin dari formulir RM. 03.1 PENGKAJIAN LUKA
+   (Wocare Center, Bogor) — urutannya menentukan skor 1..5 pada WINNER. */
+const TEPI = [
+  'Samar, tidak jelas terlihat',
+  'Batas tepi terlihat, menyatu dengan dasar luka',
+  'Jelas, tidak menyatu dengan dasar luka',
+  'Jelas, tidak menyatu dengan dasar luka, tebal',
+  'Jelas, fibrotik, parut tebal / hiperkeratotik'
+];
 
-const EKS_JUMLAH = ['Tidak Ada', 'Sedikit', 'Sedang', 'Banyak'];
+const EKS_JUMLAH = ['Kering', 'Moist', 'Sedikit', 'Sedang', 'Banyak'];
 
-const EKS_TIPE = ['Serous', 'Sanguinous', 'Serosanguinous', 'Purulent'];
+const EKS_TIPE = ['Bloody', 'Serosanguineous', 'Serous', 'Purulent'];
 
 const BAU = ['Tidak Berbau', 'Berbau Ringan', 'Sangat Berbau'];
 

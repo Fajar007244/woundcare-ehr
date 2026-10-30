@@ -439,12 +439,14 @@ const routes = {
    *
    * Kewenangan:
    *   - membaca barang & stok: semua petugas yang sudah masuk
-   *   - menambah/mengubah/menonaktifkan barang dan HARGA: admin saja.
-   *     Harga jual di sini adalah sumber harga pada invoice; kalau semua
-   *     peran boleh mengubahnya, siapa pun bisa mengubah pendapatan klinik
-   *     tanpa jejak.
+   *   - menambah/mengubah/menonaktifkan barang, harga, dan stok: semua peran.
+   *     Pemilik klinik membuka ini agar petugas gudang / perawat juga bisa
+   *     merapikan katalog tanpa menunggu admin. Setiap perubahan tetap
+   *     dicatat di log persediaan lewat db.saveItem()/db.deleteItem()/
+   *     db.addStockMove(), lengkap dengan pelakunya, jadi bukan tanpa jejak.
    *   - mencatat pemakaian: semua petugas, karena perawat di ruang tindakan
    *     yang tahu barang apa yang benar-benar dipakai.
+   *   - membaca riwayat perubahan persediaan (log): admin saja.
    */
   'GET /api/items': async (req, res, q) => {
     const u = await currentUser(req); if (!u) return json(res, 401, { error: 'Belum masuk.' });
@@ -454,7 +456,7 @@ const routes = {
   },
 
   'POST /api/items': async (req, res) => {
-    const u = await requireAdmin(req, res); if (!u) return;
+    const u = await currentUser(req); if (!u) return json(res, 401, { error: 'Belum masuk.' });
     const b = await readBody(req);
     try { json(res, 200, { item: await db.saveItem(Object.assign({}, b, { oleh: u })) }); }
     catch (e) { json(res, 400, { error: e.message }); }
@@ -462,7 +464,7 @@ const routes = {
 
   /* Nonaktifkan, bukan hapus: riwayat stok harus tetap bisa diaudit. */
   'DELETE /api/items': async (req, res, q) => {
-    const u = await requireAdmin(req, res); if (!u) return;
+    const u = await currentUser(req); if (!u) return json(res, 401, { error: 'Belum masuk.' });
     try { json(res, 200, { ok: true, item: await db.deleteItem(String(q.get('id') || ''), u) }); }
     catch (e) { json(res, 400, { error: e.message }); }
   },
@@ -477,12 +479,13 @@ const routes = {
     });
   },
 
-  /* Penerimaan & koreksi stok mengubah master persediaan, jadi admin.
-     Pengeluaran TIDAK lewat sini: ia harus melalui /api/usage supaya satu
-     transaksi sekaligus mengurangi stok DAN membuat baris invoice. Kalau
-     stok boleh dikurangi langsung, obat bisa keluar tanpa pernah ditagih. */
+  /* Penerimaan & koreksi stok terbuka untuk semua peran (bagian dari
+     pengelolaan barang di tab Produk & Stok). Pengeluaran TIDAK lewat sini:
+     ia harus melalui /api/usage supaya satu transaksi sekaligus mengurangi
+     stok DAN membuat baris invoice. Kalau stok boleh dikurangi langsung,
+     obat bisa keluar tanpa pernah ditagih. */
   'POST /api/stock': async (req, res) => {
-    const u = await requireAdmin(req, res); if (!u) return;
+    const u = await currentUser(req); if (!u) return json(res, 401, { error: 'Belum masuk.' });
     const b = await readBody(req);
     if (b && b.jenis === 'keluar') {
       return json(res, 400, {

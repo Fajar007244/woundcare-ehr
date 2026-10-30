@@ -1,4 +1,15 @@
 /* Dashboard — tambahan di atas app.css. */
+.dash-workspace {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: var(--sp-3);
+}
+
+.dash-workspace > * { min-width: 0; }
+
+.dash-workspace > .page-head { margin-bottom: var(--sp-2); }
+
 
 .dash-section-title {
   font-size: 11px;

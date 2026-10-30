@@ -80,18 +80,66 @@
    lain yang dibangun print.js tidak ikut tercetak.
    ------------------------------------------------------------------ */
 @media print {
+  @page { size: A4 portrait; margin: 9mm; }
+  html,
+  body.print-invoice,
+  body.print-kuitansi {
+    width: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+  body.print-invoice #screen-root,
+  body.print-kuitansi #screen-root,
+  body.print-invoice #root,
+  body.print-kuitansi #root {
+    position: static !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+  body.print-invoice #screen-root,
+  body.print-kuitansi #screen-root,
+  body.print-invoice #root,
+  body.print-kuitansi #root,
+  body.print-invoice .app-shell,
+  body.print-kuitansi .app-shell,
+  body.print-invoice .app-main,
+  body.print-kuitansi .app-main,
+  body.print-invoice .view,
+  body.print-kuitansi .view { display: block !important; width: 100% !important; max-width: none !important; min-height: 0 !important; height: auto !important; margin: 0 !important; padding: 0 !important; overflow: visible !important; }
+  body.print-invoice .app-sidebar,
+  body.print-kuitansi .app-sidebar,
+  body.print-invoice .app-header,
+  body.print-kuitansi .app-header { display: none !important; }
   body.print-invoice #print-root { display: none !important; }
   body.print-invoice #screen-root { display: block !important; }
-
-  body.print-invoice #screen-root * { visibility: hidden; }
-  /* Selektor wajib memuat #screen-root: tanpa itu ID pada aturan
-     "sembunyikan semua" di atas menang, dan invoice ikut tidak terlihat. */
-  body.print-invoice #screen-root .modal-backdrop,
-  body.print-invoice #screen-root .modal-backdrop * { visibility: visible; }
+  body.print-invoice .view > :not(.modal-backdrop),
+  body.print-kuitansi .view > :not(.modal-backdrop) { display: none !important; }
+  body.print-invoice #screen-root .modal__body > *:not(.print-area) { display: none !important; }
+  body.print-invoice #screen-root .app-shell,
+  body.print-invoice #screen-root .app-main,
+  body.print-invoice #screen-root .view,
+  body.print-kuitansi #screen-root .app-shell,
+  body.print-kuitansi #screen-root .app-main,
+  body.print-kuitansi #screen-root .view { display: block !important; width: 100% !important; height: auto !important; max-width: none !important; min-height: 0 !important; margin: 0 !important; padding: 0 !important; overflow: visible !important; }
+  body.print-invoice #screen-root .app-sidebar,
+  body.print-invoice #screen-root .app-header,
+  body.print-kuitansi #screen-root .app-sidebar,
+  body.print-kuitansi #screen-root .app-header { display: none !important; }
+  body.print-invoice .modal__body,
+  body.print-kuitansi .modal__body { display: block !important; height: auto !important; max-height: none !important; flex: none !important; padding: 0 !important; overflow: visible !important; }
+  body.print-invoice .modal-backdrop > .modal,
+  body.print-kuitansi .modal-backdrop > .modal { height: auto !important; max-height: none !important; overflow: visible !important; }
 
   body.print-invoice .modal-backdrop {
     display: block !important;
     position: static !important;
+    width: auto !important;
+    height: auto !important;
+    max-height: none !important;
     inset: auto !important;
     padding: 0 !important;
     overflow: visible !important;
@@ -100,6 +148,9 @@
   body.print-invoice .modal-backdrop > .modal {
     display: block !important;
     position: static !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
     width: auto !important;
     max-width: none !important;
     margin: 0 !important;
@@ -110,18 +161,45 @@
   body.print-invoice .modal__head,
   body.print-invoice .modal__foot { display: none !important; }
   body.print-invoice .modal__body {
+    display: block !important;
+    flex: none !important;
+    height: auto !important;
     padding: 0 !important;
     overflow: visible !important;
     max-height: none !important;
   }
-  body.print-invoice .modal__body > *:not(.print-area) { display: none !important; }
 
   body.print-invoice .print-area {
+    display: block !important;
     position: static !important;
     width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
     margin: 0 !important;
     padding: 0 !important;
+    color: #111 !important;
+    font-size: 10pt !important;
+    line-height: 1.25 !important;
   }
+  body.print-invoice .print-area > div,
+  body.print-invoice .print-area > table { max-width: 100% !important; }
+  body.print-invoice .print-area > div { break-inside: auto; page-break-inside: auto; }
+  body.print-invoice .print-area > div[style*="text-align: right"] { break-inside: avoid; page-break-inside: avoid; }
+  body.print-invoice .inv-detail-lines { width: 100% !important; page-break-inside: auto; break-inside: auto; }
+  body.print-invoice .inv-detail-lines th,
+  body.print-invoice .inv-detail-lines td { padding: 3px 5px !important; font-size: 9pt !important; }
+  body.print-invoice .inv-detail-lines tr { page-break-inside: avoid; break-inside: avoid; }
+  body.print-invoice .inv-detail-lines thead { display: table-header-group; }
+  body.print-invoice .inv-detail-lines td { overflow-wrap: anywhere; }
+  body.print-invoice .print-area > div:first-child,
+  body.print-invoice .print-area > div[style*="text-align: right"] { break-inside: avoid; page-break-inside: avoid; }
+  body.print-invoice .print-area > div[style*="margin-top: 12px"],
+  body.print-invoice .print-area > div[style*="margin-top: 10px"],
+  body.print-invoice .print-area > div[style*="margin-top: 14px"] { break-inside: avoid; page-break-inside: avoid; }
+  body.print-invoice .print-area input,
+  body.print-invoice .print-area select,
+  body.print-invoice .print-area button { display: none !important; }
   body.print-invoice .inv-detail-lines th,
   body.print-invoice .inv-detail-lines td { border-color: #555 !important; }
 }
@@ -140,4 +218,176 @@
 @media (max-width: 860px) {
   .inv-usage-line { grid-template-columns: 1fr 80px 32px; }
 }
+
+/* ------------------------------------------------------------------
+   Input Invoice — kelompok baris + kolom diskon per baris
+   ------------------------------------------------------------------ */
+.inv-group {
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+  padding: 12px;
+  margin-top: 14px;
+}
+.inv-group__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.inv-group__head strong { font-size: 13.5px; }
+.inv-group__head .field__hint { flex: 1 1 160px; min-width: 0; }
+.inv-group__head .btn { margin-left: auto; }
+
+.inv-line {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) 64px 110px 84px 36px;
+  gap: 8px;
+  align-items: end;
+  margin-bottom: 8px;
+}
+.inv-line--head { align-items: center; margin-bottom: 4px; }
+.inv-line--head span {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--c-text-muted);
+}
+.inv-line input { width: 100%; }
+@media (max-width: 640px) {
+  .inv-line { grid-template-columns: minmax(0, 1fr) 54px 92px 70px 32px; gap: 6px; }
+}
+
+.inv-recap {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  background: var(--c-surface-2);
+  font-size: 13px;
+}
+.inv-recap > div { display: flex; justify-content: space-between; padding: 3px 0; }
+.inv-recap > div b { font-family: var(--font-mono); font-weight: 650; }
+.inv-recap__total {
+  border-top: 1px dashed var(--c-border-strong);
+  margin-top: 6px;
+  padding-top: 8px !important;
+  font-size: 15px;
+  font-weight: 700;
+}
+.inv-recap__total b { color: var(--c-primary-dark); }
+
+/* Blok kuitansi: hanya untuk cetak, tidak tampil di layar. */
+@media screen {
+  .print-area-kuitansi { display: none; }
+}
+
+@media print {
+  body.print-kuitansi #print-root { display: none !important; }
+  body.print-kuitansi #screen-root { display: block !important; }
+  body.print-kuitansi #screen-root .modal__body > *:not(.print-area-kuitansi) { display: none !important; }
+
+  body.print-kuitansi .modal-backdrop {
+    display: block !important;
+    position: static !important;
+    width: auto !important;
+    height: auto !important;
+    max-height: none !important;
+    inset: auto !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+  }
+  body.print-kuitansi .modal-backdrop > .modal {
+    display: block !important;
+    position: static !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    width: auto !important;
+    max-width: none !important;
+    margin: 0 !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+  }
+  body.print-kuitansi .modal__head,
+  body.print-kuitansi .modal__foot { display: none !important; }
+  body.print-kuitansi .modal__body {
+    display: block !important;
+    flex: none !important;
+    height: auto !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    max-height: none !important;
+  }
+  body.print-kuitansi .print-area-kuitansi {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    color: #111 !important;
+    font-size: 10pt !important;
+    line-height: 1.25 !important;
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+  }
+  body.print-kuitansi .kuitansi__head { margin-bottom: 8px; padding-bottom: 5px; }
+  body.print-kuitansi .kuitansi__org { font-size: 13pt; }
+  body.print-kuitansi .kuitansi__addr { font-size: 9pt; }
+  body.print-kuitansi .kuitansi__title { font-size: 18pt; }
+  body.print-kuitansi .kuitansi__info { margin-bottom: 8px; }
+  body.print-kuitansi .kuitansi__info td { padding: 3px 5px !important; font-size: 9pt !important; }
+  body.print-kuitansi .kuitansi__rows { width: 100%; max-width: 340px; padding-top: 5px; }
+  body.print-kuitansi .kuitansi__rows > div { padding: 2px 0; }
+  body.print-kuitansi .kuitansi__grand { padding-top: 5px !important; font-size: 11pt; }
+  body.print-kuitansi .kuitansi__sign { margin-top: 18px; break-inside: avoid; page-break-inside: avoid; }
+  body.print-kuitansi .kuitansi__signname { margin-top: 18px; }
+  body.print-kuitansi .kuitansi__info,
+  body.print-kuitansi .kuitansi__rows { break-inside: avoid; page-break-inside: avoid; }
+  body.print-kuitansi .inv-detail-lines th,
+  body.print-kuitansi .inv-detail-lines td { border-color: #555 !important; }
+}
+
+/* Tampilan kuitansi (dipakai saat dicetak). */
+.kuitansi { font-size: 13px; color: #111; }
+.kuitansi__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  border-bottom: 2px solid #111;
+  padding-bottom: 8px;
+  margin-bottom: 12px;
+}
+.kuitansi__org { font-size: 15px; font-weight: 700; }
+.kuitansi__addr { font-size: 12px; color: #333; }
+.kuitansi__title { font-size: 22px; font-weight: 800; letter-spacing: .12em; }
+.kuitansi__info { margin-bottom: 12px; }
+.kuitansi__rows {
+  margin-left: auto;
+  width: min(340px, 100%);
+  border-top: 1px solid #999;
+  padding-top: 8px;
+}
+.kuitansi__rows > div { display: flex; justify-content: space-between; padding: 3px 0; }
+.kuitansi__rows > div b { font-family: var(--font-mono); }
+.kuitansi__grand {
+  border-top: 1px solid #111;
+  margin-top: 6px;
+  padding-top: 8px !important;
+  font-size: 15px;
+  font-weight: 700;
+}
+.kuitansi__sign { margin-top: 34px; text-align: right; font-size: 13px; }
+.kuitansi__signline { margin-top: 4px; }
+.kuitansi__signname { font-weight: 700; margin-top: 26px; }
+.kuitansi__signrole { color: #333; font-size: 12px; }
 

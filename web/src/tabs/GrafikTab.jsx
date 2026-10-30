@@ -35,6 +35,79 @@ import { Badge, EmptyState } from '../components/ui.jsx';
 
 const TINGGI = 320;   // opts.height di refreshers.grafik()
 
+/* ---------- Status kondisi luka (RM. 03.2) ----------
+   Bilah 1..55 dengan penanda 1 (jaringan sehat), 15 (regenerasi luka),
+   30, dan 55 (degenerasi luka). Setiap kunjungan yang sudah berskor
+ditandai X pada posisi skornya beserta tanggal kunjungan, sehingga
+perjalanan luka terbaca pada satu garis. Skor total 10..50 selalu jatuh
+di antara kedua ujung bilah. */
+const STATUS_LUKA = [
+  { v: 1, label: 'Jaringan Sehat' },
+  { v: 15, label: 'Regenerasi luka' },
+  { v: 30, label: '' },
+  { v: 55, label: 'Degenerasi luka' }
+];
+const STATUS_MIN = STATUS_LUKA[0].v;
+const STATUS_MAX = STATUS_LUKA[STATUS_LUKA.length - 1].v;
+const statusPct = v => ((Math.max(STATUS_MIN, Math.min(STATUS_MAX, v)) - STATUS_MIN) /
+  (STATUS_MAX - STATUS_MIN)) * 100;
+
+const STATUS_BARIS = 3;      // kedalaman tumpukan bila tanda X berdekatan
+const STATUS_JARAK_MIN = 8;  // % jarak minimum antar tanda agar tidak bertumpuk
+
+/**
+ * Bilah status kondisi luka + tanda X per kunjungan berskor.
+ * Kunjungan yang tanggal/skornya berdekatan ditumpuk ke baris berikutnya
+ * supaya tanggalnya tetap terbaca.
+ */
+function StatusKondisiLuka({ s }) {
+  const poin = s.scored || [];
+
+  let baris = 0;
+  let sebelum = null;
+  const tanda = poin.map((p, i) => {
+    const pct = statusPct(p.score);
+    baris = (sebelum !== null && pct - sebelum < STATUS_JARAK_MIN)
+      ? (baris + 1) % STATUS_BARIS
+      : 0;
+    sebelum = pct;
+    return { ...p, pct, baris, terakhir: i === poin.length - 1 };
+  });
+
+  return (
+    <div className="status-luka">
+      <div className="status-luka__title">Status Kondisi Luka</div>
+
+      {tanda.length ? (
+        <div className="status-luka__marks">
+          {tanda.map(t => (
+            <div
+              key={t.id}
+              className={`status-luka__mark${t.terakhir ? ' is-latest' : ''}`}
+              style={{ left: `${t.pct}%`, bottom: t.baris * 30 }}
+              title={`${UI.fmtDate(t.date)} — skor ${t.score}`}
+            >
+              <span className="status-luka__mark-date">{UI.fmtDate(t.date)}</span>
+              <span className="status-luka__mark-x">✕</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="status-luka__rail" aria-hidden="true"></div>
+
+      <div className="status-luka__ticks">
+        {STATUS_LUKA.map(t => (
+          <div key={t.v} className="status-luka__tick" style={{ left: `${statusPct(t.v)}%` }}>
+            <span className="status-luka__n">{t.v}</span>
+            {t.label ? <span className="status-luka__label">{t.label}</span> : null}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* ==========================================================
    Kartu 6 — Grafik tren
    ========================================================== */
@@ -289,6 +362,21 @@ function KartuGrafik({ patient, s }) {
 }
 
 /* ==========================================================
+   Kartu 6b — Status kondisi luka (bilah 1 .. 55)
+   ========================================================== */
+
+function KartuStatus({ s }) {
+  return (
+    <div className="card" style={{ marginTop: 16 }}>
+      <div className="card__head"><h2>Perkembangan Status Luka</h2></div>
+      <div className="card__body">
+        <StatusKondisiLuka s={s} />
+      </div>
+    </div>
+  );
+}
+
+/* ==========================================================
    Riwayat lengkap
    ========================================================== */
 
@@ -448,6 +536,7 @@ export default function GrafikTab({ patient, visit }) {
     <FieldProvider patient={patient} visit={visit}>
       <div id="form-grafik">
         <KartuGrafik patient={patient} s={s} />
+        <KartuStatus s={s} />
         <KartuRiwayat patient={patient} />
         <KartuTimeline patient={patient} />
       </div>

@@ -70,10 +70,10 @@ const LABEL_SLOT = { before: 'Sebelum', after: 'Sesudah' };
 function SlotFoto({ visit, slot, meta, beku, onUnggah, onHapus }) {
   const { key, title, hint } = slot;
   const fileRef = useRef(null);
-  /* srcOf() menerima dua bentuk sekaligus:
-     - data URL lama (data lama & berkas cadangan versi lama)
-     - rujukan { id, ... } yang menunjuk ke /api/photos  */
-  const src = Photos.srcOf(visit.photos && visit.photos[key]);
+  /* Semua foto slot ini — bentuk baru photos[key+'List']; bentuk lama
+     photos[key] (satu foto) diangkat menjadi daftar oleh Photos.list(). */
+  const daftar = Photos.list(visit.photos, key);
+  const jumlah = daftar.length;
   const adaMistaring = meta.ruler;
 
   /* wire(): pick.addEventListener('click', () => file.click()) */
@@ -83,22 +83,42 @@ function SlotFoto({ visit, slot, meta, beku, onUnggah, onHapus }) {
 
   return (
     <div className="photo-slot">
-      <div className="photo-slot__label">📷 {title}</div>
+      <div className="photo-slot__label">
+        📷 {title}
+        {jumlah ? <span className="photo-slot__count">{jumlah}</span> : null}
+      </div>
 
-      {/* frame.onclick = src ? () => UI.lightbox(src, cap) : null */}
+      {/* frame: kosong → placeholder; ada foto → deret thumbnail, tiap foto
+          bisa diperbesar dan dihapus satu per satu. */}
       <div
-        className="photo-slot__frame"
+        className={`photo-slot__frame${jumlah ? ' photo-slot__frame--multi' : ''}`}
         id={`frame-${key}`}
-        style={src ? undefined : { cursor: 'default' }}
-        onClick={
-          src
-            ? () => UI.lightbox(src, `${LABEL_SLOT[key]} — ${UI.fmtDateTime(visit.date, visit.time)}`)
-            : undefined
-        }
+        style={jumlah ? undefined : { cursor: 'default' }}
       >
-        {src
-          ? <img src={src} alt={title} />
-          : <span className="photo-slot__placeholder">🖼</span>}
+        {jumlah ? daftar.map((p, i) => {
+          const s = Photos.srcOf(p);
+          if (!s) return null;
+          const cap = `${LABEL_SLOT[key]} ${i + 1}/${jumlah} — ${UI.fmtDateTime(visit.date, visit.time)}`;
+          return (
+            <div className="photo-thumb-wrap" key={(p && p.id) || i}>
+              <img
+                className="photo-thumb"
+                src={s}
+                alt={`${title} ${i + 1}`}
+                title={`Perbesar — ${cap}`}
+                onClick={() => UI.lightbox(s, cap)}
+              />
+              <button
+                type="button"
+                className="photo-thumb__del"
+                disabled={beku}
+                title={beku ? 'Kunjungan dibekuan' : 'Hapus foto ini'}
+                aria-label={`Hapus foto ${i + 1} ${LABEL_SLOT[key]}`}
+                onClick={() => onHapus(key, i)}
+              >×</button>
+            </div>
+          );
+        }) : <span className="photo-slot__placeholder">🖼</span>}
       </div>
 
       {/*
@@ -110,14 +130,15 @@ function SlotFoto({ visit, slot, meta, beku, onUnggah, onHapus }) {
       <input
         type="file"
         accept="image/*"
+        multiple
         id={`file-${key}`}
         ref={fileRef}
         className="hidden"
         disabled={beku}
         onChange={e => {
-          const f = e.target.files && e.target.files[0];
+          const files = Array.from(e.target.files || []);
           e.target.value = '';          // agar berkas sama bisa dipilih ulang
-          onUnggah(key, f);
+          if (files.length) onUnggah(key, files);
         }}
       />
 
@@ -126,16 +147,9 @@ function SlotFoto({ visit, slot, meta, beku, onUnggah, onHapus }) {
           className="btn btn--sm btn--primary"
           id={`pick-${key}`}
           disabled={beku}
-          title={beku ? 'Kunjungan dibekuan' : undefined}
+          title={beku ? 'Kunjungan dibekuan' : 'Pilih satu atau banyak foto'}
           onClick={pilih}
-        >Unggah Foto</button>
-        <button
-          className="btn btn--sm btn--danger"
-          id={`clear-${key}`}
-          disabled={beku}
-          title={beku ? 'Kunjungan dibekuan' : undefined}
-          onClick={() => onHapus(key)}
-        >Hapus</button>
+        >+ Unggah Foto</button>
       </div>
 
       {/*
@@ -145,7 +159,7 @@ function SlotFoto({ visit, slot, meta, beku, onUnggah, onHapus }) {
        * teks petunjuknya disimpan sebagai title.
        */}
       <div className="photo-slot__meta" id={`meta-${key}`} title={hint}>
-        <span>{meta.bytes[key] ? Photos.humanSize(meta.bytes[key]) : 'belum ada foto'}</span>
+        <span>{jumlah ? `${jumlah} foto · ${Photos.humanSize(meta.bytes[key])}` : 'belum ada foto'}</span>
         <span>{adaMistaring ? '📏 mistar' : ''}</span>
       </div>
     </div>
@@ -230,9 +244,11 @@ function KartuGaleri({ patient }) {
                 const cap = UI.fmtDateTime(v.date, v.time);
 
                 const thumb = k => {
-                  const s = Photos.srcOf(p[k]);
-                  return s
-                    ? (
+                  const daftar = Photos.list(p, k);
+                  const s = Photos.srcOf(daftar[0]);
+                  if (!s) return <div className="photo-none">—</div>;
+                  return (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                       <img
                         className="photo-thumb"
                         src={s}
@@ -240,8 +256,9 @@ function KartuGaleri({ patient }) {
                         title={`Perbesar — ${cap}`}
                         onClick={() => UI.lightbox(s, cap)}
                       />
-                    )
-                    : <div className="photo-none">—</div>;
+                      {daftar.length > 1 ? <Badge tone="primary">+{daftar.length - 1}</Badge> : null}
+                    </span>
+                  );
                 };
 
                 return (
@@ -284,8 +301,9 @@ function KartuGaleri({ patient }) {
  */
 function hitungMetaFoto(visit) {
   const p = (visit && visit.photos) || {};
+  const total = k => Photos.list(p, k).reduce((a, r) => a + Photos.sizeOf(r), 0);
   return {
-    bytes: { before: Photos.sizeOf(p.before), after: Photos.sizeOf(p.after) },
+    bytes: { before: total('before'), after: total('after') },
     ruler: !!p.ruler
   };
 }
@@ -296,14 +314,14 @@ function IsiFoto({ patient, visit, rev, setRev }) {
   const meta = useMemo(() => hitungMetaFoto(visit), [visit, rev]);
 
   /*
-   * Tulis foto ke model + jejak audit ringkas.
+   * Tulis DAFTAR foto ke model + jejak audit ringkas.
    * Lihat catatan panjang di kepala berkas soal kenapa tidak lewat ctx.write().
    *
-   * `nilai` sekarang berupa RUJUKAN { id, mime, width, height, size } atau
-   * null — bukan lagi data URL, karena binernya disimpan server sebagai BLOB.
-   * Photos.sizeOf() menerima keduanya, jadi jejak audit tetap terbaca manusia.
+   * Isi foto (rujukan { id, mime, ... } / data URL) bukan kolom formulir:
+   * ditulis langsung, tapi jejaknya tetap dicatat dalam bentuk ringkas
+   * yang terbaca manusia: "(kosong)" → "3 foto (512 KB)".
    */
-  function tulisFoto(key, nilai) {
+  function tulisFoto(key, daftar) {
     const v = visit;
     if (!v) return false;
 
@@ -314,16 +332,21 @@ function IsiFoto({ patient, visit, rev, setRev }) {
 
     if (!v.photos) v.photos = { before: null, after: null, catatan: '', ruler: false, rulerNote: '' };
 
-    const lama = v.photos[key] || null;
-    const ket = d => (d ? Photos.humanSize(Photos.sizeOf(d)) : '(kosong)');
+    const lama = Photos.list(v.photos, key);
+    const ket = arr => (arr && arr.length
+      ? `${arr.length} foto (${Photos.humanSize(arr.reduce((a, r) => a + Photos.sizeOf(r), 0))})`
+      : '(kosong)');
 
-    v.photos[key] = nilai;
+    /* Daftar adalah sumber kebenaran; photos[key] tetap dijaga sebagai
+       foto pertama supaya cetak, galeri, dan pembaca lama tetap jalan. */
+    v.photos[`${key}List`] = daftar;
+    v.photos[key] = daftar[0] || null;
 
     Store.appendAudit(patient.id, v.id, {
       key: `photos.${key}`,
       label: `Foto ${LABEL_SLOT[key]}`,
       before: ket(lama),
-      after: ket(nilai),
+      after: ket(daftar),
       risky: false,
       oleh: Store.currentUserName() || 'Tanpa nama'
     });
@@ -337,52 +360,65 @@ function IsiFoto({ patient, visit, rev, setRev }) {
     return true;
   }
 
-  /* wire(): file.addEventListener('change', ...) */
-  async function unggah(key, file) {
-    if (!file) return;
+  /* wire(): file.addEventListener('change', ...) — kini bisa banyak berkas. */
+  async function unggah(key, files) {
+    const antre = Array.from(files || []).filter(Boolean);
+    if (!antre.length) return;
 
-    UI.toast('Memproses foto...', 'muted', 1200);
-    try {
-      // Photos.fromInput() membaca input.files lalu bersihin sendiri;
-      // karena kita sudah mengambil File-nya di onChange, cukup
-      // compressAdaptive() — sama seperti wire() di app.js lama.
-      // Hasilnya kini membawa `blob` (biner mentah), bukan hanya data URL.
-      const r = await Photos.compressAdaptive(file);
+    UI.toast(`Memproses ${antre.length} foto...`, 'muted', 1500);
 
-      /* Dikirim sebagai BINER, bukan base64: server menyimpannya sebagai
-         BLOB dan mengembalikan rujukan ringan yang masuk ke model. */
-      const hasil = await API.uploadPhoto({
-        visitId: visit.id, kind: key, blob: r.blob, width: r.width, height: r.height
-      });
+    const daftar = Photos.list(vphotos(), key);
+    const idAda = new Set(daftar.map(r => r && r.id).filter(Boolean));
+    let tersimpan = 0, gagal = 0;
 
-      /* Simpan data URL hasil kompresi ke cache cetak. Di sini data URL-nya
-         sudah tersedia tanpa perlu meminta ulang ke server — dan di sinilah
-         satu-satunya tempat asal mula foto itu diketahui. */
-      window.FOTO_CACHE = window.FOTO_CACHE || {};
-      window.FOTO_CACHE[hasil.photo.id] = r.dataUrl;
+    for (const file of antre) {
+      try {
+        // Kompresi adaptif — sama seperti wire() di app.js lama.
+        // Hasilnya kini membawa `blob` (biner mentah), bukan hanya data URL.
+        const r = await Photos.compressAdaptive(file);
 
-      if (!tulisFoto(key, hasil.photo)) return;
+        /* Dikirim sebagai BINER, bukan base64: server menyimpannya sebagai
+           BLOB dan mengembalikan rujukan ringan yang masuk ke model. */
+        const hasil = await API.uploadPhoto({
+          visitId: visit.id, kind: key, blob: r.blob, width: r.width, height: r.height
+        });
 
-      UI.toast(
-        `Foto ${LABEL_SLOT[key].toLowerCase()} tersimpan (${Photos.humanSize(hasil.photo.size)})`,
-        'ok'
-      );
-    } catch (err) {
-      UI.toast((err && err.message) || 'Gagal memproses foto', 'danger');
+        /* Simpan data URL hasil kompresi ke cache cetak. Di sini data URL-nya
+           sudah tersedia tanpa perlu meminta ulang ke server. */
+        window.FOTO_CACHE = window.FOTO_CACHE || {};
+        window.FOTO_CACHE[hasil.photo.id] = r.dataUrl;
+
+        tersimpan++;
+        /* Berkas isi sama persis menghasilkan id yang sama (id = hash isi)
+           dan menimpa barisnya sendiri di server — tidak diduplikasi. */
+        if (!idAda.has(hasil.photo.id)) {
+          idAda.add(hasil.photo.id);
+          daftar.push(hasil.photo);
+        }
+      } catch (err) {
+        gagal++;
+        console.error('[foto]', err);
+      }
     }
+
+    if (tersimpan && tulisFoto(key, daftar)) {
+      UI.toast(`${tersimpan} foto ${LABEL_SLOT[key].toLowerCase()} tersimpan`, 'ok');
+    }
+    if (gagal) UI.toast(`${gagal} foto gagal diproses`, 'danger');
   }
 
-  /* wire(): clr.addEventListener('click', ...) — ditambah konfirmasi */
-  async function hapus(key) {
-    const v = visit;
-    const lama = v && v.photos && v.photos[key];
-    if (!lama) {
-      UI.toast(`Belum ada foto ${LABEL_SLOT[key].toLowerCase()} untuk dihapus`, 'muted', 1600);
-      return;
-    }
+  function vphotos() {
+    return (visit && visit.photos) || {};
+  }
+
+  /* Klik × pada satu thumbnail — ditambah konfirmasi. */
+  async function hapus(key, idx) {
+    const daftar = Photos.list(vphotos(), key);
+    const foto = daftar[idx];
+    if (!foto) return;
 
     const ok = await UI.confirm(
-      `Hapus foto ${LABEL_SLOT[key].toLowerCase()} kunjungan ini?\n\n` +
+      `Hapus foto ${LABEL_SLOT[key].toLowerCase()} ke-${idx + 1} dari kunjungan ini?\n\n` +
       'Foto akan hilang dari rekam medis dan tidak dapat dikembalikan.',
       { title: 'Hapus Foto', okText: 'Hapus Foto' }
     );
@@ -392,11 +428,13 @@ function IsiFoto({ patient, visit, rev, setRev }) {
        BLOB yatim di basis data. Kalau langkah ini gagal, rujukan di model
        tetap dibuang — jangan sampai foto "hantu" yang tidak bisa dibuka
        tertinggal di rekam medis. */
-    if (lama && lama.id) {
-      try { await API.deletePhoto(lama.id); } catch (e) { /* diabaikan */ }
+    if (foto.id) {
+      try { await API.deletePhoto(foto.id); } catch (e) { /* diabaikan */ }
     }
 
-    if (!tulisFoto(key, null)) return;
+    const sisa = daftar.slice();
+    sisa.splice(idx, 1);
+    if (!tulisFoto(key, sisa)) return;
     UI.toast('Foto dihapus', 'muted', 1500);
   }
 

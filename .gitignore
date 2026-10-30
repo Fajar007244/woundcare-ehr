@@ -16,3 +16,8 @@ data/
 .DS_Store
 Thumbs.db
 *.log
+
+# State lokal alat bantu freebuff: id proyek, log, dan pid servernya.
+# Bukan bagian aplikasi — jangan pernah ikut ter-commit.
+.freebuff/
+.freebuff-server.pid
