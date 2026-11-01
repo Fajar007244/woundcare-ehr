@@ -159,21 +159,6 @@ function UserMenu({ user, unsynced, onLogout }) {
   );
 }
 
-function Header() {
-  const { clinic } = useData();
-  const nav = useNavigate();
-
-  return (
-    <header className="app-header app-header--content">
-      <button type="button" className="app-header__page-brand" onClick={() => nav('/')} title="Ke dashboard">
-        <span className="app-header__clinic">{clinic.nama || 'WoundCare EHR'}</span>
-        <span className="app-header__subtitle">Rekam Medis &amp; Manajemen Klinis Perawatan Luka</span>
-      </button>
-      <div className="app-header__spacer"></div>
-    </header>
-  );
-}
-
 /* ==========================================================
    Halaman satu pasien
    ========================================================== */
@@ -536,41 +521,65 @@ export default function App() {
   const nav = useNavigate();
   const isAdmin = !!(user && user.peran === 'Admin');
 
+  /* Navigasi dikelompokkan supaya menu harian (atas) terpisah dari
+     menu pengelolaan yang hanya muncul untuk admin. */
   const halaman = [
     { to: '/', icon: 'activity', label: 'Dashboard' },
     { to: '/pasien', icon: 'user', label: 'Mitra' },
     { to: '/kasir', icon: 'receipt', label: 'Kasir & Invoice' },
     { to: '/persediaan', icon: 'box', label: 'Produk & Stok' }
   ];
-  if (isAdmin) {
-    halaman.push(
-      { to: '/omset', icon: 'wallet', label: 'Omset' },
-      { to: '/pengaturan', icon: 'database', label: 'Pengaturan' }
+  const pengelolaan = isAdmin ? [
+    { to: '/omset', icon: 'wallet', label: 'Omset' },
+    { to: '/pengaturan', icon: 'database', label: 'Pengaturan' }
+  ] : [];
+
+  /* Setelah login halaman dibuka sebagai /index.html, bukan '/'. Tanpa
+     normalisasi ini tidak ada satu pun menu yang tersorot di dashboard. */
+  const jalur = /^\/index\.html?$/i.test(pathname) ? '/' : pathname;
+
+  /* Tanggal lengkap hari ini, tampil di bawah identitas klinik. */
+  const hariIni = new Date().toLocaleDateString('id-ID', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+  });
+
+  const tombolNav = item => {
+    const aktif = item.to === '/'
+      ? jalur === '/'
+      : jalur === item.to || jalur.startsWith(item.to + '/');
+    return (
+      <button
+        key={item.to}
+        type="button"
+        className={`app-sidebar__item${aktif ? ' is-active' : ''}`}
+        aria-current={aktif ? 'page' : undefined}
+        onClick={() => nav(item.to)}
+      >
+        <span className="app-sidebar__icon"><Icon name={item.icon} size={17} className="app-sidebar__ico" /></span>
+        <span className="app-sidebar__label">{item.label}</span>
+      </button>
     );
-  }
+  };
 
   return (
     <div className="app-shell">
       <aside className="app-sidebar" aria-label="Navigasi utama">
-        <div className="app-sidebar__brand"><Brand clinic={clinic} /></div>
+        <div className="app-sidebar__brand">
+          <Brand clinic={clinic} />
+          <div className="app-sidebar__date" title={hariIni}>
+            <Icon name="clock" size={13} className="app-sidebar__date-ico" />
+            <span>{hariIni}</span>
+          </div>
+        </div>
         <nav className="app-sidebar__nav">
-          {halaman.map(item => {
-            const aktif = item.to === '/'
-              ? pathname === '/'
-              : pathname === item.to || pathname.startsWith(item.to + '/');
-            return (
-              <button
-                key={item.to}
-                type="button"
-                className={`app-sidebar__item${aktif ? ' is-active' : ''}`}
-                aria-current={aktif ? 'page' : undefined}
-                onClick={() => nav(item.to)}
-              >
-                <Icon name={item.icon} size={18} className="app-sidebar__ico" />
-                <span>{item.label}</span>
-              </button>
-            );
-          })}
+          <div className="app-sidebar__group">Menu</div>
+          {halaman.map(tombolNav)}
+          {pengelolaan.length ? (
+            <>
+              <div className="app-sidebar__group app-sidebar__group--gap">Pengelolaan</div>
+              {pengelolaan.map(tombolNav)}
+            </>
+          ) : null}
         </nav>
         <div className="app-sidebar__bottom">
           <UserMenu user={user} unsynced={unsynced} onLogout={logout} />
@@ -578,7 +587,6 @@ export default function App() {
       </aside>
 
       <div className="app-main">
-        <Header />
         <Routes>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/pasien" element={<PatientListPage />} />

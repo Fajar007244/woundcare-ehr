@@ -54,6 +54,24 @@
     padding-bottom: 3mm;
     margin-bottom: 5mm;
   }
+
+  /* --- Kop berulang pada setiap halaman ---
+     Kop diletakkan di <thead> tabel pembungkus dokumen; mesin cetak
+     mengulang thead setiap kali tabel berlanjut ke halaman baru.
+     Ini lebih andal daripada position: fixed, yang di Chrome hanya
+     tercetak sekali/berantakan saat dipaginasi. */
+  table.pr-doc {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  table.pr-doc > thead { display: table-header-group; }
+  table.pr-doc > tbody { display: table-row-group; }
+  table.pr-doc > thead > tr > td,
+  table.pr-doc > tbody > tr > td {
+    padding: 0;
+    border: 0;
+    vertical-align: top;
+  }
   .pr-head__logo {
     width: 20mm;
     height: 20mm;

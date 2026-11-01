@@ -25,6 +25,55 @@ const isAdmin = () => {
   return !!(u && u.peran === 'Admin');
 };
 
+/* ---------------- Pilihan cakupan cetak ----------------
+ * Satu kunjungan atau seluruh riwayat. Tanpa pilihan ini, tombol cetak
+ * selalu menghasilkan dokumen penuh — panjang, dan sering tidak sesuai
+ * kebutuhan saat pasien hanya datang untuk kontrol hari itu.
+ */
+function pilihCakupanCetak(patient, visit) {
+  const total = (patient.visits || []).length;
+  const kunjungan = visit
+    ? UI.fmtDateTime(visit.date, visit.time)
+    : 'belum ada kunjungan';
+
+  let m;
+  const cetak = range => {
+    m.close();
+    Store.access('cetak', patient, range === 'current' ? 'Cetak kunjungan' : 'Cetak rekam medis');
+    PrintDoc.print({
+      patientId: patient.id,
+      visitId: visit && visit.id,
+      range
+    });
+  };
+
+  m = UI.modal({
+    title: 'Cetak Rekam Medis',
+    body: `
+      <p class="field__hint" style="margin-bottom:10px">Pilih dokumen yang ingin dicetak.</p>
+      <div class="callout">
+        <strong>Kunjungan aktif</strong>
+        ${UI.esc(kunjungan)} — total ${total} kunjungan tercatat.
+      </div>`,
+    footer: [
+      UI.el('button', { class: 'btn', text: 'Batal', onclick: () => m.close() }),
+      UI.el('button', {
+        class: 'btn',
+        text: 'Cetak Kunjungan Ini',
+        onclick: () => cetak('current'),
+        disabled: visit ? undefined : 'disabled',
+        title: visit ? `Cetak ${kunjungan} saja` : 'Belum ada kunjungan untuk dicetak'
+      }),
+      UI.el('button', {
+        class: 'btn btn--primary',
+        text: 'Cetak Seluruh Kunjungan',
+        onclick: () => cetak('all'),
+        title: `Cetak seluruh ${total} kunjungan`
+      })
+    ]
+  });
+}
+
 /* ---------------- Bar identitas ---------------- */
 
 export function PatientBar({ patient, visit, onBack, onNewVisit, onOpenAccessLog }) {
@@ -76,10 +125,9 @@ export function PatientBar({ patient, visit, onBack, onNewVisit, onOpenAccessLog
 
       <div className="patient-bar__actions">
         <button className="btn btn--sm btn--primary" onClick={onNewVisit}>+ Kunjungan Baru</button>
-        <button className="btn btn--sm" onClick={() => {
-          Store.access('cetak', patient, 'Cetak rekam medis');
-          PrintDoc.print({ patientId: patient.id, visitId: visit && visit.id, range: 'all' });
-        }}>Cetak Rekam Medis</button>
+        <button className="btn btn--sm" onClick={() => pilihCakupanCetak(patient, visit)}>
+          Cetak Rekam Medis
+        </button>
       </div>
     </div>
   );

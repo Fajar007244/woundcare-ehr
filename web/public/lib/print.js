@@ -17,7 +17,9 @@ const PrintDoc = (() => {
     || 'assets/images/logo.png';
 
   /* ---------- Kop surat ---------- */
-  function header(subtitle) {
+
+  /** Kop saja (tanpa judul) — dipakai sebagai <thead> agar berulang tiap halaman. */
+  function kopSurat() {
     const c = Store.clinic;
     const now = new Date();
     return `
@@ -33,8 +35,24 @@ const PrintDoc = (() => {
           ${esc(String(now.getHours()).padStart(2, '0'))}:${esc(String(now.getMinutes()).padStart(2, '0'))}<br>
           WoundCare EHR v${Store.version}
         </div>
-      </div>
-      <div class="pr-title">${esc(subtitle || 'Formulir Rekam Medis & Perawatan Luka Modern')}</div>`;
+      </div>`;
+  }
+
+  /** Judul dokumen — hanya tercetak sekali, di halaman pertama. */
+  function header(subtitle) {
+    return `<div class="pr-title">${esc(subtitle || 'Formulir Rekam Medis & Perawatan Luka Modern')}</div>`;
+  }
+
+  /**
+   * Bungkus isi dokumen dalam tabel yang <thead>-nya berisi kop.
+   * Mesin cetak mengulang thead di setiap halaman, jadi kop selalu muncul
+   * di atas — termasuk pada halaman lanjutan satu kunjungan yang panjang.
+   */
+  function dokumen(isi) {
+    return `<table class="pr-doc">
+      <thead><tr><td>${kopSurat()}</td></tr></thead>
+      <tbody><tr><td>${isi}</td></tr></tbody>
+    </table>`;
   }
 
   /* ---------- Kotak isian ---------- */
@@ -135,40 +153,117 @@ const PrintDoc = (() => {
   const OPT_ISKEMIA  = ['Tidak ada', 'Ragu-ragu', 'Ya (kaki dingin, pucat, tidak berkeringat)'];
 
   /* ---------- Bagian 2: Informed Consent ---------- */
+
+  /** Isi sel: data bila ada, sel kosong bila tidak (untuk ditulis tangan). */
+  function isi(v) { return v === null || v === undefined ? '' : esc(String(v)); }
+
+  /** Kota pada baris tanggal — kata terakhir alamat klinik. */
+  function kotaKlinik() {
+    const bagian = String((Store.clinic && Store.clinic.alamat) || '').trim().split(/\s+/);
+    return bagian.length ? bagian[bagian.length - 1] : '';
+  }
+
+  /* Susunan mengikuti formulir RM. 01 "INFORMED CONSENT — Surat Pernyataan
+     Persetujuan". Kop surat tetap memakai header() aplikasi, bukan kop
+     formulir kertas, sesuai permintaan. */
   function sectionConsent(p) {
+    const id = p.identity || {};
+    const c = (p.consents && p.consents[0]) || null;
+    const umur = UI.hitungUmur(id.tglLahir);
+    const lahirUsia = id.tglLahir
+      ? `${UI.fmtDate(id.tglLahir)}${umur !== null ? ` / ${umur} th` : ''}` : '';
+
+    /* Bila penanda tangan bukan pasien sendiri, KTP/alamat/telepon pasien
+       tidak boleh tercetak seolah-olah milik penanda tangan. */
+    const samaPasien = !c || !c.nama
+      || String(c.nama).trim().toLowerCase() === String(id.nama || '').trim().toLowerCase();
+    const saya = (c && c.nama) || id.nama || '';
+
+    const baris = (label, isiSel, style) =>
+      `<tr><td class="pr-k">${esc(label)}</td><td colspan="3"${style ? ` style="${style}"` : ''}>${isiSel}</td></tr>`;
+
+    const tanggal = c && c.date ? UI.fmtDate(c.date) : '';
+
     return `
     <div class="pr-sec">
       <div class="pr-sec__head">2. Informed Consent (Persetujuan Tindakan)</div>
-      <p style="font-size:8.8pt;margin:0 0 2mm">
-        Saya yang bertanda tangan di bawah ini:
-      </p>
-      <p style="font-size:8.8pt;margin:0 0 2mm">
-        Nama Pasien / Penanggung Jawab:
-        <span class="pr-line">${esc(p.consents[0] ? p.consents[0].nama : (p.identity.nama || ''))}</span>
-        &nbsp;&nbsp; Hubungan:
-        <span class="pr-line" style="min-width:26mm">${esc(p.consents[0] ? p.consents[0].hubungan : '')}</span>
-      </p>
-      <p style="font-size:8.8pt;margin:0 0 2mm">
-        Menyatakan <b>SETUJU / TIDAK SETUJU</b> untuk dilakukan tindakan perawatan luka modern,
-        dokumentasi foto luka, serta prosedur medis pendukung lainnya, setelah menerima penjelasan
-        mengenai tujuan, risiko, dan estimasi biaya perawatan luka.
-      </p>
+
+      <div style="text-align:center;margin:0 0 3mm">
+        <div style="font-size:12pt;font-weight:700;letter-spacing:.1em">INFORMED CONSENT</div>
+        <div style="font-size:9pt">Surat Pernyataan Persetujuan</div>
+      </div>
+
+      <p style="font-size:8.8pt;margin:0 0 1.5mm">Saya yang bertandatangan di bawah ini:</p>
+      <table class="pr">
+        ${baris('Nama Lengkap', isi(saya))}
+        ${baris('No. KTP', isi(samaPasien ? id.nik : ''))}
+        ${baris('Tgl Lahir / Usia', isi(samaPasien ? lahirUsia : ''))}
+        ${baris('Alamat tinggal', isi(samaPasien ? id.alamat : ''), 'height:11mm')}
+        ${baris('Telp./HP', isi(samaPasien ? id.telepon : ''))}
+        ${baris('Hubungan dengan pasien', isi(c && c.hubungan ? c.hubungan : ''))}
+      </table>
+
+      <p style="font-size:8.8pt;margin:2.5mm 0 1.5mm">Bertindak sebagai pasien/wali keluarga pasien:</p>
       <table class="pr">
         <tr>
-          <th style="width:26mm">Tanggal &amp; Waktu</th>
-          <th style="width:36mm">Tanda Tangan Pasien / Wali</th>
-          <th style="width:36mm">Tanda Tangan Perawat / Suster</th>
-          <th>Catatan</th>
+          <td class="pr-k">Nama Pasien</td><td>${isi(id.nama)}</td>
+          <td class="pr-k" style="width:30mm">Tgl Lahir / Usia</td><td>${isi(lahirUsia)}</td>
         </tr>
-        ${(p.consents.length ? p.consents : [null]).map(c => `
         <tr>
-          <td>${c ? esc(UI.fmtDateTime(c.date, c.time)) : '__ / ____ / 20____ , ____ : ____'} ${c ? box(c.keputusan === 'SETUJU') + (c.keputusan === 'SETUJU' ? ' SETUJU' : ' TIDAK SETUJU') : box(true) + ' SETUJU'}</td>
-          <td class="pr-fill">${c && c.tandaTanganPasien ? esc(c.tandaTanganPasien) : ''}</td>
-          <td class="pr-fill">${c && c.tandaTanganPerawat ? esc(c.tandaTanganPerawat) : ''}</td>
-          <td>${c ? esc(c.catatan || '') : ''}</td>
+          <td class="pr-k">No. Rekam Medis</td><td>${isi(p.mrNumber)}</td>
+          <td class="pr-k">No. KTP</td><td>${isi(id.nik)}</td>
+        </tr>
+      </table>
+
+      <p style="font-size:8.8pt;margin:3mm 0 1mm;text-align:justify">
+        Menyatakan ${box(!!c && c.keputusan === 'SETUJU')} <b>SETUJU</b>
+        &nbsp;&nbsp; ${box(!!c && c.keputusan === 'TIDAK SETUJU')} <b>TIDAK SETUJU</b>
+        &nbsp; untuk dilakukan tindakan <b>PERAWATAN LUKA</b> atas pasien tersebut di atas.
+      </p>
+      <p style="font-size:8.8pt;margin:0 0 1mm;text-align:justify">
+        Dengan telah diinformasikannya terlebih dahulu tentang kondisi pasien tersebut dan saya
+        mengerti serta memahami konsekuensi dari tindakan tersebut, sesuai dengan penjelasan
+        yang telah diberikan tenaga kesehatan yang melakukan perawatannya.
+      </p>
+      <p style="font-size:8.8pt;margin:0;text-align:justify">
+        Demikianlah surat ini saya buat dengan penuh kesadaran dan tanpa tekanan dari pihak manapun.
+      </p>
+
+      <div style="text-align:right;font-size:8.8pt;margin:4mm 0 0">
+        ${esc(kotaKlinik() || '……………………')}, ${tanggal
+          ? esc(tanggal)
+          : '<span style="display:inline-block;min-width:34mm;border-bottom:.5pt solid #000"></span>'}
+      </div>
+
+      <div class="pr-sig" style="margin-top:1mm">
+        <div class="pr-sig__col">
+          <div>Yang membuat pernyataan,</div>
+          <div class="pr-sig__box">${c && c.tandaTanganPasien ? esc(c.tandaTanganPasien) : ''}</div>
+          <div style="border-top:.5pt solid #000;padding-top:1mm">${isi(saya)}</div>
+        </div>
+        <div class="pr-sig__col">
+          <div>Yang memberikan penjelasan,</div>
+          <div class="pr-sig__box">${c && c.tandaTanganPerawat ? esc(c.tandaTanganPerawat) : ''}</div>
+          <div style="border-top:.5pt solid #000;padding-top:1mm">${isi((Store.clinic && Store.clinic.namaPemilik) || '')}</div>
+        </div>
+      </div>
+
+      ${p.consents.length ? `
+      <table class="pr" style="margin-top:3mm">
+        <tr>
+          <th style="width:34mm">Tanggal &amp; Waktu</th><th>Nama / Hubungan</th>
+          <th style="width:26mm">Keputusan</th><th>Catatan</th>
+        </tr>
+        ${p.consents.map(cs => `
+        <tr>
+          <td>${esc(UI.fmtDateTime(cs.date, cs.time))}</td>
+          <td>${isi(cs.nama)}${cs.hubungan ? ` <span style="color:#555">(${esc(cs.hubungan)})</span>` : ''}</td>
+          <td>${box(cs.keputusan === 'SETUJU')} ${esc(cs.keputusan || '—')}</td>
+          <td>${isi(cs.catatan)}</td>
         </tr>`).join('')}
       </table>
-      ${p.consents.length ? '' : `<p class="pr-legend">Bagian ini belum ditandatangani pada sistem digital. Cetak dan tanda tangani secara basah.</p>`}
+      <p class="pr-legend">Baris di atas adalah berkas persetujuan yang tersimpan di sistem. Kolom tanda tangan sengaja dibiarkan kosong untuk ditandatangani basah.</p>`
+      : '<p class="pr-legend">Belum ada berkas persetujuan tersimpan. Cetak formulir ini dan tandatangani secara basah.</p>'}
     </div>`;
   }
 
@@ -351,7 +446,12 @@ const PrintDoc = (() => {
 
     const rows = Scales.ITEMS.map((it, i) => {
       const val = Number(scores[it.key]);
-      const note = scores['note_' + it.key] || (v.winner.notes && v.winner.notes[it.key]) || '';
+      /* Temuan disimpan di winner.note_<key> (bukan di winner.scores),
+         jadi itulah yang dibaca lebih dulu. Kalau kosong, pakai teks
+         parameter yang dipilih — itu yang tampil di formulir WINNER. */
+      const note = (v.winner && v.winner['note_' + it.key]) || scores['note_' + it.key] ||
+        (v.winner.notes && v.winner.notes[it.key]) ||
+        (val >= 1 && val <= 5 ? (it.anchors[val] || '') : '');
       return `<tr>
         <td style="width:6mm;text-align:center">${i + 1}</td>
         <td style="width:52mm">${esc(it.label)}</td>
@@ -402,12 +502,106 @@ const PrintDoc = (() => {
     </div>`;
   }
 
-  /* ---------- Bagian 6: Grafik ---------- */
+  /* ---------- Bagian 6: Pemeriksaan Penunjang ---------- */
+
+  /** Teks multi-baris -> HTML aman. */
+  function teks(t) {
+    if (t === null || t === undefined || t === '') return '—';
+    return esc(String(t)).replace(/\n/g, '<br>');
+  }
+
+  /** Entri pemeriksaan yang belum dihapus, urut tanggal lalu id. */
+  function entriPemeriksaan(obj) {
+    return Object.entries(obj || {})
+      .filter(([, e]) => e && e.dihapus !== true)
+      .sort(([ia, a], [ib, b]) => String(a.tanggal || '').localeCompare(String(b.tanggal || '')) || ia.localeCompare(ib));
+  }
+
+  function sectionInvestigations(v) {
+    const inv = v.pemeriksaan || {};
+    const lab = entriPemeriksaan(inv.laboratorium);
+    const rad = entriPemeriksaan(inv.radiologi);
+
+    const kosong = '<tr><td colspan="5" style="text-align:center;color:#555">Belum ada isian.</td></tr>';
+
+    return `
+    <div class="pr-sec">
+      <div class="pr-sec__head">6. Hasil Pemeriksaan Penunjang</div>
+      <div style="font-size:8.5pt;font-weight:700;margin:1mm 0">A. Laboratorium</div>
+      <table class="pr">
+        <tr>
+          <th style="width:20mm">Tanggal</th><th style="width:30mm">Pemeriksaan</th>
+          <th style="width:22mm">Spesimen</th><th>Hasil / Nilai</th><th style="width:38mm">Catatan</th>
+        </tr>
+        ${lab.length ? lab.map(([, e]) => `
+        <tr>
+          <td>${esc(e.tanggal ? UI.fmtDate(e.tanggal) : '—')}</td>
+          <td>${teks(e.pemeriksaan)}</td>
+          <td>${teks(e.spesimen)}</td>
+          <td>${teks(e.hasil)}</td>
+          <td>${teks(e.catatan)}</td>
+        </tr>`).join('') : kosong}
+      </table>
+      <div style="font-size:8.5pt;font-weight:700;margin:2.5mm 0 1mm">B. Radiologi</div>
+      <table class="pr">
+        <tr>
+          <th style="width:20mm">Tanggal</th><th style="width:24mm">Modalitas</th>
+          <th style="width:24mm">Area</th><th>Temuan</th><th style="width:38mm">Kesimpulan</th>
+        </tr>
+        ${rad.length ? rad.map(([, e]) => `
+        <tr>
+          <td>${esc(e.tanggal ? UI.fmtDate(e.tanggal) : '—')}</td>
+          <td>${teks(e.modalitas)}</td>
+          <td>${teks(e.area)}</td>
+          <td>${teks(e.temuan)}</td>
+          <td>${teks(e.kesimpulan)}</td>
+        </tr>`).join('') : kosong}
+      </table>
+    </div>`;
+  }
+
+  /* ---------- Bagian 7: CPPT ---------- */
+  function sectionCppt(v) {
+    const c = v.cppt || {};
+    const vital = c.vital || {};
+    const baris = (label, isi) => `<tr><td class="pr-k">${esc(label)}</td><td>${teks(isi)}</td></tr>`;
+
+    return `
+    <div class="pr-sec">
+      <div class="pr-sec__head">7. Catatan Perkembangan Pasien Terintegrasi (CPPT)</div>
+
+      <table class="pr">
+        <tr><th colspan="4">Pemeriksaan Tanda-Tanda Vital</th></tr>
+        <tr>
+          <td class="pr-k">Tekanan darah</td><td>${teks(vital.tekananDarah)}</td>
+          <td class="pr-k">Nadi</td><td>${teks(vital.nadi)}</td>
+        </tr>
+        <tr>
+          <td class="pr-k">Respirasi</td><td>${teks(vital.respirasi)}</td>
+          <td class="pr-k">Suhu</td><td>${teks(vital.suhu)}</td>
+        </tr>
+      </table>
+
+      <table class="pr" style="margin-top:2mm">
+        ${baris('S — Subjective', c.subjective)}
+        ${baris('O — Objective', c.objective)}
+        ${baris('A — Diagnosis keperawatan', UI.joinList(c.diagnoses, ', ', ''))}
+        ${c.diagnosisTambahan ? baris('Diagnosis tambahan', c.diagnosisTambahan) : ''}
+        ${baris('P — Planning', c.planning)}
+        ${baris('T — Tissue management', c.tissueManagement)}
+        ${baris('I — Inflammation / infection control', c.infectionControl)}
+        ${baris('M — Moisture balance', c.moistureBalance)}
+        ${baris('E — Epithelial edge', c.epithelialEdge)}
+      </table>
+    </div>`;
+  }
+
+  /* ---------- Bagian 8: Grafik ---------- */
   function sectionGraph(p, chartDataUrl) {
     const s = Store.summarize(p);
     return `
     <div class="pr-sec">
-      <div class="pr-sec__head">6. Grafik Tren &amp; Ringkasan Perkembangan</div>
+      <div class="pr-sec__head">8. Grafik Tren &amp; Ringkasan Perkembangan</div>
       <div class="pr-chart">
         ${chartDataUrl
           ? `<img src="${chartDataUrl}" alt="Grafik tren WINNER Scale">`
@@ -462,6 +656,83 @@ const PrintDoc = (() => {
 
   function w0(v) { return (v === null || v === undefined || v === '') ? '—' : v; }
 
+  /* ---------- Bagian 9: Perkembangan status luka ---------- */
+
+  /* Bilah 1..55 (RM. 03.2): 1 jaringan sehat, 15 regenerasi,
+     30, 55 degenerasi — sama dengan tab Grafik Tren. */
+  const STATUS_TITIK = [
+    { v: 1, label: 'Jaringan sehat' },
+    { v: 15, label: 'Regenerasi luka' },
+    { v: 30, label: '' },
+    { v: 55, label: 'Degenerasi luka' }
+  ];
+  const STATUS_MIN = 1;
+  const STATUS_MAX = 55;
+  const statusPct = v => ((Math.max(STATUS_MIN, Math.min(STATUS_MAX, v)) - STATUS_MIN) /
+    (STATUS_MAX - STATUS_MIN)) * 100;
+
+  /** Posisi absolut yang tidak terpotong di tepi kiri/kanan. */
+  function posisi(pct) {
+    if (pct < 8) return 'left:0;text-align:left';
+    if (pct > 92) return 'left:100%;transform:translateX(-100%);text-align:right';
+    return `left:${pct}%;transform:translateX(-50%);text-align:center`;
+  }
+
+  function sectionStatus(p) {
+    const s = Store.summarize(p);
+    const poin = s.scored || [];
+
+    /* Tumpuk tanda yang berdekatan agar tanggalnya tetap terbaca. */
+    let baris = 0;
+    let sebelum = null;
+    const tanda = poin.map(t => {
+      const pct = statusPct(t.score);
+      baris = (sebelum !== null && pct - sebelum < 8) ? (baris + 1) % 3 : 0;
+      sebelum = pct;
+      return { ...t, pct, baris };
+    });
+
+    return `
+    <div class="pr-sec">
+      <div class="pr-sec__head">9. Perkembangan Status Luka</div>
+      ${poin.length ? '' : '<p style="font-size:8.8pt;margin:0">Belum ada kunjungan dengan skor WINNER, sehingga posisi luka pada bilah status belum dapat ditentukan.</p>'}
+      <div style="position:relative;height:22mm">
+        ${tanda.map(t => `
+        <div style="position:absolute;bottom:${t.baris * 6}mm;${posisi(t.pct)};font-size:6.5pt;line-height:1.15;white-space:nowrap">
+          <div>${esc(UI.fmtDate(t.date))}</div>
+          <div style="font-weight:700;font-size:9pt">&#10005; ${t.score}</div>
+        </div>`).join('')}
+      </div>
+      <div style="height:1.6mm;border:.5pt solid #555;background:#e8f4f2;-webkit-print-color-adjust:exact;print-color-adjust:exact"></div>
+      <div style="position:relative;height:9mm;font-size:6.5pt">
+        ${STATUS_TITIK.map(t => `
+        <div style="position:absolute;top:0.6mm;${posisi(statusPct(t.v))};line-height:1.15">
+          <div style="font-weight:700">${t.v}</div>
+          ${t.label ? `<div>${esc(t.label)}</div>` : ''}
+        </div>`).join('')}
+      </div>
+      <table class="pr" style="margin-top:1mm">
+        <tr><th style="width:26mm">Tanggal</th><th style="width:14mm">Skor</th>
+            <th style="width:34mm">Band</th><th style="width:20mm">Posisi</th><th>Keterangan</th></tr>
+        ${poin.length ? poin.map(t => {
+          const b = Scales.band(t.score);
+          return `<tr>
+            <td>${esc(UI.fmtDate(t.date))}</td>
+            <td style="text-align:center;font-weight:700">${t.score}</td>
+            <td>${b ? esc(b.short) : '—'}</td>
+            <td style="text-align:center">${statusPct(t.score).toFixed(0)}%</td>
+            <td>${esc(t.score <= 15 ? 'Mendekati kondisi jaringan sehat' : t.score <= 30 ? 'Fase regenerasi / perbaikan' : 'Mengarah ke degenerasi luka')}</td>
+          </tr>`;
+        }).join('') : '<tr><td colspan="5" style="text-align:center;color:#555">Belum ada data skor.</td></tr>'}
+      </table>
+      <p class="pr-legend">
+        Bilah 1&ndash;55 mengikuti status kondisi luka: 1 = jaringan sehat, 15 = regenerasi luka,
+        55 = degenerasi luka. Posisi dihitung dari skor total WINNER Scale
+        (${Scales.MIN_TOTAL}&ndash;${Scales.MAX_TOTAL}) pada setiap kunjungan berskor.
+      </p>
+    </div>`;
+  }
+
   /* ---------- Tanda tangan akhir ---------- */
   function signatureBlock(p, v) {
     return `
@@ -509,7 +780,7 @@ const PrintDoc = (() => {
       const list = Store.activePatients();
       if (!list.length) { host.innerHTML = '<p>Tidak ada data pasien untuk dicetak.</p>'; return; }
 
-      host.innerHTML = header('Daftar Pasien Aktif') + `
+      host.innerHTML = dokumen(header('Daftar Pasien Aktif') + `
         <div class="pr-sec">
           <table class="pr">
             <tr><th>No</th><th style="width:26mm">No. RM</th><th>Nama</th><th style="width:16mm">JK</th>
@@ -531,7 +802,7 @@ const PrintDoc = (() => {
             }).join('')}
           </table>
         </div>
-        <p class="pr-note">Dicetak ${esc(UI.fmtDate(new Date().toISOString().slice(0, 10)))} · ${list.length} pasien aktif · WoundCare EHR v${Store.version}</p>`;
+        <p class="pr-note">Dicetak ${esc(UI.fmtDate(new Date().toISOString().slice(0, 10)))} · ${list.length} pasien aktif · WoundCare EHR v${Store.version}</p>`);
       return;
     }
 
@@ -572,7 +843,7 @@ const PrintDoc = (() => {
     html += sectionConsent(p);
 
     if (!visits.length) {
-      html += `<div class="pr-sec"><div class="pr-sec__head">3–6. Pengkajian</div>
+      html += `<div class="pr-sec"><div class="pr-sec__head">3–9. Pengkajian</div>
         <p style="font-size:9pt">Belum ada kunjungan yang tercatat untuk pasien ini.</p></div>`;
     } else {
       visits.forEach((v, i) => {
@@ -581,12 +852,17 @@ const PrintDoc = (() => {
         html += sectionWound(v);
         html += sectionPhotos(v);
         html += sectionWinner(v);
-        if (opts.range === 'current') html += sectionGraph(p, chartUrl);
+        html += sectionInvestigations(v);
+        html += sectionCppt(v);
+        if (opts.range === 'current') {
+          html += sectionGraph(p, chartUrl);
+          html += sectionStatus(p);
+        }
         html += signatureBlock(p, v);
         html += `</div>`;
       });
       if (opts.range !== 'current') {
-        html += `<div class="pr-break"></div>` + sectionGraph(p, chartUrl);
+        html += `<div class="pr-break"></div>` + sectionGraph(p, chartUrl) + sectionStatus(p);
       }
     }
 
@@ -596,12 +872,22 @@ const PrintDoc = (() => {
       yang bertanggung jawab atas pasien.
     </p>`;
 
-    host.innerHTML = html;
+    host.innerHTML = dokumen(html);
   }
 
   /* ---------- Cetak ---------- */
+
+  /* Cetak yang diminta lewat tombol (mis. "Cetak Kunjungan Ini").
+   * window.print() memicu event `beforeprint`, dan handler di bawah
+   * membangun ulang dokumen dengan SELURUH riwayat pasien. Tanpa penanda
+   * ini, dokumen yang baru dibangun sesuai pilihan langsung tertimpa dan
+   * kedua tombol menghasilkan halaman yang sama. */
+  let permintaanCetak = null; // { at: number }
+  const UMUR_PERMINTAAN = 60000;
+
   function print(opts) {
     build(opts);
+    permintaanCetak = { at: Date.now() };
     // Beri jeda agar gambar & font selesai dirender
     setTimeout(() => window.print(), 60);
   }
@@ -614,6 +900,9 @@ const PrintDoc = (() => {
     if (preload.decode) preload.decode().catch(() => {});
 
     window.addEventListener('beforeprint', () => {
+      /* Dokumen sudah dibangun oleh print() sesuai pilihan pengguna —
+         jangan ditimpa dengan seluruh riwayat. */
+      if (permintaanCetak && Date.now() - permintaanCetak.at < UMUR_PERMINTAAN) return;
       const app = window.App && window.App.state;
       if (!app) return;
       if (app.view === 'patient' && app.patientId) {
@@ -622,6 +911,10 @@ const PrintDoc = (() => {
         build({});
       }
     });
+
+    /* Dialog ditutup (cetak atau batal): cetak berikutnya lewat Ctrl+P
+       kembali memakai seluruh riwayat. */
+    window.addEventListener('afterprint', () => { permintaanCetak = null; });
   }
 
   return { build, print, init, header, sectionIdentity, sectionWinner };

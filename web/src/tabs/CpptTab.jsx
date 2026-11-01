@@ -1,6 +1,6 @@
 /* Catatan CPPT (SOAP-TIME) untuk kunjungan aktif. */
 
-import { FieldProvider, Field, ChipGroup } from '../core/field-binding.jsx';
+import { FieldProvider, Field, ChipGroup, Row } from '../core/field-binding.jsx';
 import { EmptyState } from '../components/ui.jsx';
 
 const DIAGNOSIS = [
@@ -26,6 +26,16 @@ export default function CpptTab({ patient, visit }) {
             <p className="field__hint" style={{ marginTop: 0, marginBottom: 16 }}>
               Catat perkembangan klinis pasien pada kunjungan ini. Perubahan tersimpan otomatis dan tercatat di audit kunjungan.
             </p>
+
+            <section className="cppt-section">
+              <h3><span>V</span> Pemeriksaan Tanda-Tanda Vital</h3>
+              <Row n={4}>
+                <Field path="cppt.vital.tekananDarah" label="Tekanan darah" placeholder="120/80 mmHg" />
+                <Field path="cppt.vital.nadi" label="Nadi" placeholder="80 x/menit" />
+                <Field path="cppt.vital.respirasi" label="Respirasi" placeholder="20 x/menit" />
+                <Field path="cppt.vital.suhu" label="Suhu" placeholder="36,5 °C" />
+              </Row>
+            </section>
 
             <section className="cppt-section">
               <h3><span>S</span> Subjective — Holistic Assessment</h3>

@@ -161,17 +161,20 @@ function BarisSkor({ item, nomor, patient, visit, onNilaiUrut }) {
         </td>
       ))}
 
+      {/*
+        Kolom temuan TIDAK diisi manual: isinya otomatis teks parameter yang
+        dipilih pada skor 1–5 baris ini, jadi tulisan di sini selalu sama
+        dengan angka yang dicentang. Catatan lama (diketik bebas sebelum
+        perubahan ini) tetap ditampilkan lebih dulu agar tidak hilang.
+      */}
       <td className="note-cell">
         <input
           type="text"
           id={`winner-note-${item.key}`}
-          placeholder="temuan"
-          disabled={beku}
-          value={catatan}
-          onChange={e => ctx.write(pathCatat, e.target.value, {
-            label: `Catatan — ${item.label}`,
-            before: catatan
-          })}
+          readOnly
+          placeholder={terisi ? '' : 'pilih skor 1–5'}
+          title={terisi ? `Temuan: ${item.anchors[nilai]}` : 'Pilih skor untuk mencatat temuan'}
+          value={catatan || (terisi ? (item.anchors[nilai] || '') : '')}
         />
       </td>
     </tr>
