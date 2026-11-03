@@ -53,6 +53,82 @@
 .inv-pay-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
 @media (max-width: 640px) { .inv-pay-form { grid-template-columns: 1fr; } }
 
+/* Kaki modal cetak invoice: label ukuran kertas + tombol cetak.
+   `.modal__foot` rata kanan dan tidak membungkus, jadi pada modal sempit
+   isinya dulu melewati tepi kiri sampai label "Kertas" hilang di luar
+   layar. Modifier ini membiarkan baris membungkus dan menahan label di
+   dalam kotak. */
+.modal__foot--cetak { flex-wrap: wrap; }
+.modal__foot--cetak .print-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: auto;
+  font-size: 12.5px;
+  color: var(--c-text-muted);
+  flex: 0 0 auto;
+}
+.modal__foot--cetak .print-size select {
+  width: auto;
+  min-width: 74px;
+  padding: 5px 8px;
+}
+@media (max-width: 640px) {
+  .modal__foot--cetak .print-size { margin-right: 0; }
+}
+
+/* Invoice di samping grafik tren (tab Grafik Tren). */
+.grafik-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-4);
+  align-items: start;
+  margin-bottom: var(--sp-4);
+}
+@media (max-width: 1080px) {
+  .grafik-grid { grid-template-columns: minmax(0, 1fr); }
+}
+.grafik-grid .card { margin-bottom: 0; }
+/* Ringkasan invoice kunjungan yang sedang dibuka (tab Grafik Tren). */
+.inv-kunjungan {
+  border: 1px solid var(--c-border-strong);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background: var(--c-surface-2, transparent);
+}
+.inv-kunjungan__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-bottom: 8px;
+  margin-bottom: 6px;
+  border-bottom: 1px dashed var(--c-border-strong);
+}
+.inv-kunjungan__head span {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 13px;
+}
+.inv-baris {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12.5px;
+  padding: 2px 0;
+}
+.inv-baris span { color: var(--c-text-muted); }
+.inv-baris b { font-family: var(--font-mono); }
+.inv-baris--sisa b { color: var(--c-danger, inherit); }
+
+/* Ukuran dasar teks invoice di layar. Saat dicetak nilainya diganti
+   --inv-font sesuai ukuran kertas, sehingga semua bagian (judul, total,
+   rekomendasi) ikut membesar/mengecil — dulu angka px di dalamnya tidak
+   ikut berubah walau kertas diganti. */
+.print-area { font-size: 13px; }
+
 /* revenue chart */
 .rev-chart { width: 100%; height: 260px; }
 .rev-chart svg { width: 100%; height: 100%; }
@@ -80,7 +156,17 @@
    lain yang dibangun print.js tidak ikut tercetak.
    ------------------------------------------------------------------ */
 @media print {
-  @page { size: A4 portrait; margin: 9mm; }
+  /* Skala huruf per ukuran kertas. Kelas `kertas-*` dipasang bersama kelas
+     cetak saat tombol cetak ditekan, dan dipakai BERSAMA oleh invoice &
+     kuitansi — satu pilihan kertas mengatur keduanya.
+
+     Ukuran LEMBAR-nya tidak diatur di sini: BillingPage menyisipkan satu
+     aturan `@page { size: … }` sesuai pilihan, karena `@page` tidak bisa
+     bergantung pada kelas <body>. */
+  body.kertas-a4 { --inv-font: 10.5pt; --inv-pad: 3px 6px; }
+  body.kertas-a5 { --inv-font: 9.5pt;  --inv-pad: 2.5px 5px; }
+  body.kertas-a6 { --inv-font: 8pt;    --inv-pad: 2px 4px; }
+
   html,
   body.print-invoice,
   body.print-kuitansi {
@@ -179,7 +265,7 @@
     margin: 0 !important;
     padding: 0 !important;
     color: #111 !important;
-    font-size: 10pt !important;
+    font-size: var(--inv-font, 10pt) !important;
     line-height: 1.25 !important;
   }
   body.print-invoice .print-area > div,
@@ -188,7 +274,7 @@
   body.print-invoice .print-area > div[style*="text-align: right"] { break-inside: avoid; page-break-inside: avoid; }
   body.print-invoice .inv-detail-lines { width: 100% !important; page-break-inside: auto; break-inside: auto; }
   body.print-invoice .inv-detail-lines th,
-  body.print-invoice .inv-detail-lines td { padding: 3px 5px !important; font-size: 9pt !important; }
+  body.print-invoice .inv-detail-lines td { padding: var(--inv-pad, 3px 5px) !important; font-size: calc(var(--inv-font, 10pt) - 1pt) !important; }
   body.print-invoice .inv-detail-lines tr { page-break-inside: avoid; break-inside: avoid; }
   body.print-invoice .inv-detail-lines thead { display: table-header-group; }
   body.print-invoice .inv-detail-lines td { overflow-wrap: anywhere; }
@@ -334,20 +420,20 @@
     margin: 0 !important;
     padding: 0 !important;
     color: #111 !important;
-    font-size: 10pt !important;
+    font-size: var(--inv-font, 10pt) !important;
     line-height: 1.25 !important;
     break-inside: avoid-page;
     page-break-inside: avoid;
   }
   body.print-kuitansi .kuitansi__head { margin-bottom: 8px; padding-bottom: 5px; }
-  body.print-kuitansi .kuitansi__org { font-size: 13pt; }
-  body.print-kuitansi .kuitansi__addr { font-size: 9pt; }
-  body.print-kuitansi .kuitansi__title { font-size: 18pt; }
+  body.print-kuitansi .kuitansi__org { font-size: calc(var(--inv-font, 10pt) + 3pt); }
+  body.print-kuitansi .kuitansi__addr { font-size: calc(var(--inv-font, 10pt) - 1pt); }
+  body.print-kuitansi .kuitansi__title { font-size: calc(var(--inv-font, 10pt) + 8pt); }
   body.print-kuitansi .kuitansi__info { margin-bottom: 8px; }
-  body.print-kuitansi .kuitansi__info td { padding: 3px 5px !important; font-size: 9pt !important; }
+  body.print-kuitansi .kuitansi__info td { padding: var(--inv-pad, 3px 5px) !important; font-size: calc(var(--inv-font, 10pt) - 1pt) !important; }
   body.print-kuitansi .kuitansi__rows { width: 100%; max-width: 340px; padding-top: 5px; }
   body.print-kuitansi .kuitansi__rows > div { padding: 2px 0; }
-  body.print-kuitansi .kuitansi__grand { padding-top: 5px !important; font-size: 11pt; }
+  body.print-kuitansi .kuitansi__grand { padding-top: 5px !important; font-size: calc(var(--inv-font, 10pt) + 1pt); }
   body.print-kuitansi .kuitansi__sign { margin-top: 18px; break-inside: avoid; page-break-inside: avoid; }
   body.print-kuitansi .kuitansi__signname { margin-top: 18px; }
   body.print-kuitansi .kuitansi__info,

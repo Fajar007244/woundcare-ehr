@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useData } from '../core/data.jsx';
 import { UI, API } from '../lib/index.js';
 import { Badge, Callout, EmptyState } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
 import { openFinanceLog } from '../core/overlays.jsx';
+import InputInvoiceModal from '../components/invoice-form.jsx';
 import '../styles/billing.css';
 
 function rupiah(n) { return 'Rp ' + Number(n || 0).toLocaleString('id-ID'); }
@@ -17,6 +18,18 @@ function tambahHari(iso, n) {
   if (!y || !m || !d) return '';
   return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
 }
+
+/* Ukuran lembar untuk cetak invoice & kuitansi. Dipakai menyusun aturan
+   @page saat mencetak dan mengatur skala huruf per lembar di billing.css.
+
+   Ukuran ditulis dalam milimeter, bukan kata kunci: kata kunci A6 tidak
+   dikenali Chrome, sehingga halaman jatuh ke ukuran default printer
+   (Letter) dan isinya tercetak kecil di tengah lembar besar. */
+const KERTAS_INVOICE = {
+  a4: { size: '210mm 297mm', margin: '9mm' },
+  a5: { size: '148mm 210mm', margin: '7mm' },
+  a6: { size: '105mm 148mm', margin: '5mm' }
+};
 function firstDayOfMonth() {
   const d = new Date();
   return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
@@ -38,39 +51,6 @@ function statusLabel(s) {
    dressing, obat-obatan, dan jasa tindakan masing-masing punya kolom
    diskon sendiri; transport hanya tampil untuk home care; rekomendasi
    (kunjungan ke-… & kontrol selanjutnya…) hanya untuk onsite. */
-const GROUPS = [
-  {
-    key: 'dressing', label: 'Pemakaian Dressing', jenis: 'dressing', inventoryJenis: ['dressing'],
-    hint: 'Metcovazine, Hydrocolloid, Foam, Transparent Film, dll.',
-    contoh: ['Metcovazine Silver 50gr', 'Hydrocolloid 10x10cm',
-             'Wound Foam 10x20cm', 'Transparent Film']
-  },
-  {
-    key: 'alkes', label: 'Alkes / Alat Kesehatan', jenis: 'alkes', inventoryJenis: ['alkes'],
-    hint: 'Alat kesehatan habis pakai, ...',
-    contoh: ['Sarung tangan', 'Masker', 'Tensimeter strip']
-  },
-  {
-    key: 'obat', label: 'Obat-obatan dan BMHP', jenis: 'bmhp', inventoryJenis: ['obat', 'bmhp'],
-    hint: 'VIP Albumin, Sanmol, Neurobion, kasa, NaCl, Handscoon, dll.',
-    contoh: ['VIP Albumin', 'Sanmol 500mg', 'Neurobion']
-  },
-  {
-    key: 'jasa', label: 'Jasa Tindakan / Professional Fee', jenis: 'tindakan',
-    hint: 'Tarif jasa tindakan per kunjungan. Isi nama dan harga secara manual.',
-    contoh: ['Jasa perawatan luka', 'Jasa tindakan profesional']
-  },
-  {
-    key: 'transport', label: 'Transport', jenis: 'tindakan', homecareOnly: true,
-    hint: 'Biaya transport perawat — khusus Home Care',
-    contoh: ['Transport home care']
-  }
-];
-
-const barisKosong = () => [{ nama: '', qty: 1, harga: 0, diskon: 0 }];const semuaGrup = () => ({
-  dressing: barisKosong(), alkes: barisKosong(), obat: barisKosong(), jasa: barisKosong(), transport: barisKosong()
-});
-
 /* Blok kuitansi untuk CETAK — di layar disembunyikan CSS, hanya muncul
    saat body.print-kuitansi aktif (lihat billing.css). */
 function AreaKuitansi({ inv, clinic }) {
@@ -122,7 +102,14 @@ function AreaKuitansi({ inv, clinic }) {
 export default function BillingPage() {
   const { user, patients, clinic } = useData();
   const nav = useNavigate();
+  const loc = useLocation();
   const isAdmin = !!(user && user.peran === 'Admin');
+
+  /* Formulir Input Invoice kini komponen bersama. `key` yang berubah tiap
+     pembukaan memaksa isian lama dibuang, dan pasien/kunjungan awal bisa
+     langsung dititipkan dari layar mana pun. */
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualSeed, setManualSeed] = useState({ patientId: '', visitId: '', n: 0 });
 
   const [from, setFrom] = useState(firstDayOfMonth());
   const [to, setTo] = useState(todayISO());
@@ -135,22 +122,21 @@ export default function BillingPage() {
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailInv, setDetailInv] = useState(null);
+  /* Ringkasan dari baris tabel, ditampilkan seketika saat modal dibuka.
+     Rincian baris & pembayaran menyusul dari server; tanpa ini modal
+     tampak kosong lebih dulu dan terasa berat. */
+  const [detailRingkas, setDetailRingkas] = useState(null);
   const [detailErr, setDetailErr] = useState(null);
   const [payBusy, setPayBusy] = useState(false);
   const [payForm, setPayForm] = useState({ tanggal: todayISO(), metode: 'tunai', jumlah: '', catatan: '' });
 
-  const [manualOpen, setManualOpen] = useState(false);
-  const [manualPatientId, setManualPatientId] = useState('');
-  const [manualVisitId, setManualVisitId] = useState('');
-  const [manualLayanan, setManualLayanan] = useState('onsite');
-  const [manualRekomendasi, setManualRekomendasi] = useState('');
-  const [manualKontrol, setManualKontrol] = useState('');
-  const [manualLines, setManualLines] = useState(semuaGrup);
-  const [manualItems, setManualItems] = useState([]);
-  const [manualItemsError, setManualItemsError] = useState('');
-  const [manualDiskon, setManualDiskon] = useState(0);
-  const [manualCatatan, setManualCatatan] = useState('');
-  const [manualBusy, setManualBusy] = useState(false);
+  /* Satu pilihan ukuran kertas untuk invoice sekaligus kuitansi. */
+  const [kertas, setKertas] = useState('a4');
+  /* 'invoice' | 'kuitansi' — bagian mana yang dicetak. Selama modal rincian
+     terbuka, pilihan ini (dan ukuran kertasnya) langsung diterapkan ke
+     <body>, jadi Ctrl+P pun menghasilkan lembar yang sama. */
+  const [cetakMode, setCetakMode] = useState('invoice');
+  const [cetakMinta, setCetakMinta] = useState(null);
 
   async function muat() {
     setLoading(true);
@@ -177,12 +163,15 @@ export default function BillingPage() {
 
   async function bukaDetail(inv) {
     setDetailOpen(true);
+    setCetakMode('invoice');
+    setDetailRingkas(inv || null);
     setDetailInv(null);
     setDetailErr(null);
     try {
       const d = await API.getInvoice(inv.id);
       const i = d.invoice;
       setDetailInv(i);
+      setDetailRingkas(i);
       const sisa = Number(i.total) - Number(i.dibayar);
       setPayForm({ tanggal: todayISO(), metode: 'tunai', jumlah: sisa > 0 ? String(sisa) : '', catatan: '' });
     } catch (e) {
@@ -244,56 +233,62 @@ export default function BillingPage() {
     setPayForm(f => ({ ...f, jumlah: sisa > 0 ? String(sisa) : '' }));
   }
 
-  /* Cetak dari modal yang sedang terbuka. Kelas di <body> membuat CSS cetak
-     hanya mengaktifkan blok yang diinginkan (.print-area untuk invoice,
-     .print-area-kuitansi untuk kuitansi) dan menyembunyikan sisa
-     aplikasi; tanpa kelas itu dokumen cetak halaman lain ikut
-     terpengaruh (lihat billing.css). */
-  function cetakDengan(kelas) {
-    const bersih = () => {
-      document.body.classList.remove(kelas);
-      window.removeEventListener('afterprint', bersih);
+  /* Selama modal rincian terbuka: pasang kelas <body> (print-invoice /
+     print-kuitansi + kertas-a4|a5|a6) dan aturan @page sesuai pilihan
+     kertas. Kelas di <body> membuat CSS cetak hanya mengaktifkan blok yang
+     diinginkan dan menyembunyikan sisa aplikasi (lihat billing.css).
+
+     Dulu semua ini dipasang di dalam fungsi cetak, akibatnya Ctrl+P biasa
+     tidak pernah memakai ukuran kertas yang dipilih — hasilnya selalu lembar
+     A4 dengan tulisan kecil. Sekarang keadaannya mengikuti state. */
+  useEffect(() => {
+    if (!detailOpen) return undefined;
+    const ukuran = KERTAS_INVOICE[kertas] || KERTAS_INVOICE.a4;
+    /* Aturan @page tidak bisa dipilih lewat kelas <body>, jadi satu <style>
+       disisipkan. Ditulis tanpa pembungkus @media print: Chrome mengabaikan
+       @page di dalam @media. */
+    let gaya = document.getElementById('inv-paper-size');
+    if (!gaya) {
+      gaya = document.createElement('style');
+      gaya.id = 'inv-paper-size';
+      document.head.appendChild(gaya);
+    }
+    gaya.textContent = `@page { size: ${ukuran.size}; margin: ${ukuran.margin}; }`;
+    const aktif = cetakMode === 'kuitansi' ? 'print-kuitansi' : 'print-invoice';
+    const pasif = aktif === 'print-invoice' ? 'print-kuitansi' : 'print-invoice';
+    document.body.classList.remove(pasif);
+    document.body.classList.add(aktif, 'kertas-' + kertas);
+    return () => {
+      document.body.classList.remove('print-invoice', 'print-kuitansi');
+      document.body.classList.remove('kertas-a4', 'kertas-a5', 'kertas-a6');
+      if (gaya && gaya.parentNode) gaya.parentNode.removeChild(gaya);
     };
-    document.body.classList.add(kelas);
-    window.addEventListener('afterprint', bersih);
-    setTimeout(() => {
-      window.print();
-      // Jaring pengaman bila afterprint tidak dipicu (mis. dialog diblokir).
-      setTimeout(bersih, 1000);
-    }, 50);
-  }
+  }, [detailOpen, kertas, cetakMode]);
+
+  /* Percetakan dijalankan setelah kelas & @page terpasang (effect di atas),
+     supaya dialog cetak membaca ukuran yang benar. */
+  useEffect(() => {
+    if (!cetakMinta) return undefined;
+    const id = setTimeout(() => window.print(), 60);
+    const selesai = () => setCetakMinta(null);
+    window.addEventListener('afterprint', selesai, { once: true });
+    return () => {
+      clearTimeout(id);
+      window.removeEventListener('afterprint', selesai);
+    };
+  }, [cetakMinta]);
 
   function cetakInvoice() {
     if (!detailInv) return;
-    cetakDengan('print-invoice');
+    setCetakMode('invoice');
+    setCetakMinta('invoice');
   }
 
   function cetakKuitansi() {
     if (!detailInv) return;
-    cetakDengan('print-kuitansi');
+    setCetakMode('kuitansi');
+    setCetakMinta('kuitansi');
   }
-
-  const selectedManualPatient = (patients || []).find(p => p.id === manualPatientId) || null;
-  /* Urutan kronologis (lama → baru) dipakai untuk menghitung kunjungan
-     ke-berapa dan dasar tanggal kontrol. Dropdown menampilkannya terbalik. */
-  const manualVisits = selectedManualPatient
-    ? (selectedManualPatient.visits || []).slice().sort((a, b) =>
-        String(a.date || '').localeCompare(String(b.date || '')) || String(a.time || '').localeCompare(String(b.time || '')))
-    : [];
-  const manualVisitsTerbaru = manualVisits.slice().reverse();
-  /* Tanggal dasar usulan kontrol: kunjungan yang dipilih kasir, atau
-     kunjungan terakhir pasien bila belum ada yang dipilih. */
-  const visitTerpilih = manualVisitId ? manualVisits.find(v => v.id === manualVisitId) : null;
-  const visitDasar = visitTerpilih || manualVisits[manualVisits.length - 1] || null;
-  const kontrolUsulan = visitDasar && visitDasar.date
-    ? tambahHari(visitDasar.date, 7)
-    : tambahHari(todayISO(), 7);
-  const kontrolTampil = manualKontrol || kontrolUsulan;
-
-  const rekomendasiDefault = selectedManualPatient
-    ? `Kunjungan ke-${manualVisits.length + 1} dan kontrol selanjutnya ${UI.fmtDate(kontrolTampil)}`
-    : '';
-  const rekomendasiTampil = manualRekomendasi || rekomendasiDefault;
 
   /* Angka ringkas invoice yang sedang dilihat. `subtotal` tersimpan sudah
      NETTO per baris (qty × harga − diskon baris), jadi subtotal kotor dan
@@ -310,180 +305,21 @@ export default function BillingPage() {
     };
   })();
 
-  function bukaManual() {
-    setManualPatientId('');
-    setManualVisitId('');
-    setManualLayanan('onsite');
-    setManualRekomendasi('');
-    setManualKontrol('');
-    setManualLines(semuaGrup());
-    setManualDiskon(0);
-    setManualCatatan('');
+  function bukaManual(patientId = '', visitId = '') {
+    setManualSeed(seed => ({ patientId: patientId || '', visitId: visitId || '', n: seed.n + 1 }));
     setManualOpen(true);
   }
 
-  function pilihPasienInvoice(patientId) {
-    setManualPatientId(patientId);
-    setManualVisitId('');
-    setManualRekomendasi('');
-    setManualKontrol('');
-  }
-
-  function pilihKunjunganInvoice(visitId) {
-    setManualVisitId(visitId);
-    // Tanggal kontrol ikut diusulkan ulang dari kunjungan yang baru dipilih.
-    setManualKontrol('');
-    setManualRekomendasi('');
-  }
-
-  /* Produk katalog yang boleh dipakai satu kelompok baris. */
-  function produkGrupUntuk(g) {
-    const jenisProduk = Array.isArray(g.inventoryJenis)
-      ? g.inventoryJenis
-      : (g.inventoryJenis ? [g.inventoryJenis] : []);
-    if (!jenisProduk.length) return [];
-    return manualItems.filter(item => jenisProduk.includes(item.jenis) && Number(item.aktif) === 1);
-  }
-
-  function stokProduk(itemId) {
-    const it = (manualItems || []).find(x => String(x.id) === String(itemId));
-    return it ? Number(it.stok) || 0 : 0;
-  }
-
-  /* Pilih produk: harga otomatis, tetapi produk tanpa stok ditolak dengan
-     peringatan supaya kasir tidak menagih barang yang tidak ada. */
-  function pilihProdukBaris(g, i, id) {
-    if (!id) {
-      updateManualLine(g.key, i, { itemId: '', nama: '', harga: 0, satuan: '' });
-      return;
-    }
-    const item = produkGrupUntuk(g).find(p => String(p.id) === id);
-    if (!item) return;
-    if (Number(item.stok) <= 0) {
-      UI.toast(
-        `Stok ${item.nama} habis (0 ${item.satuan || 'unit'}). Tambah stok di Produk & Stok terlebih dahulu.`,
-        'warn'
-      );
-      updateManualLine(g.key, i, { itemId: '', nama: '', harga: 0, satuan: '' });
-      return;
-    }
-    updateManualLine(g.key, i, {
-      itemId: String(item.id), nama: item.nama,
-      harga: Number(item.harga_jual) || 0, satuan: item.satuan || '', qty: 1
-    });
-  }
-
-  /* Qty tidak boleh melebihi stok: kelebihan dipotong ke sisa stok + alert. */
-  function ubahQtyBaris(g, i, nilai) {
-    const line = (manualLines[g.key] || [])[i];
-    if (!g.inventoryJenis || !line || !line.itemId) {
-      updateManualLine(g.key, i, { qty: nilai });
-      return;
-    }
-    const stok = stokProduk(line.itemId);
-    const qty = Number(nilai) || 0;
-    if (qty > stok) {
-      UI.toast(`Stok ${line.nama || 'produk'} hanya ${angka(stok)}. Jumlah disesuaikan.`, 'warn');
-      updateManualLine(g.key, i, { qty: stok });
-      return;
-    }
-    updateManualLine(g.key, i, { qty: nilai });
-  }
-
-  function updateManualLine(grup, i, patch) {
-    setManualLines(prev => ({
-      ...prev,
-      [grup]: prev[grup].map((l, idx) => idx === i ? { ...l, ...patch } : l)
-    }));
-  }
-  function addManualLine(grup) {
-    setManualLines(prev => ({ ...prev, [grup]: [...prev[grup], barisKosong()[0]] }));
-  }
-  function removeManualLine(grup, i) {
-    setManualLines(prev => ({
-      ...prev,
-      [grup]: prev[grup].length > 1 ? prev[grup].filter((_, idx) => idx !== i) : prev[grup]
-    }));
-  }
-
-  /* Ringkasan hidup di bawah formulir — dihitung dari baris yang sedang
-     diketik, sama seperti yang nantinya dihitung server. */
-  const manualHitung = (() => {
-    let kotor = 0, net = 0;
-    GROUPS.forEach(g => (manualLines[g.key] || []).forEach(l => {
-      if (g.inventoryJenis && !l.itemId) return;
-      const produk = l.itemId ? manualItems.find(item => String(item.id) === String(l.itemId)) : null;
-      const harga = g.inventoryJenis
-        ? (produk ? Number(produk.harga_jual) || 0 : 0)
-        : (Number(l.harga) || 0);
-      const k = (Number(l.qty) || 0) * harga;
-      const d = Math.min(100, Math.max(0, Number(l.diskon) || 0));
-      kotor += k;
-      net += k - Math.round(k * d / 100);
-    }));
-    const total = Math.max(0, net - (Number(manualDiskon) || 0));
-    return { kotor, diskonBaris: kotor - net, total };
-  })();
-
-  async function simpanManual() {
-    const lines = [];
-    GROUPS
-      .filter(g => !(g.homecareOnly && manualLayanan !== 'homecare'))
-      .forEach(g => (manualLines[g.key] || []).forEach(l => {
-        if (g.inventoryJenis && !l.itemId) return;
-        if (!String(l.nama || '').trim()) return;
-        const qty = Number(l.qty) || 0;
-        if (qty <= 0) return;
-        lines.push({
-          itemId: l.itemId || undefined,
-          nama: String(l.nama || '').trim(), qty,
-          harga: Number(l.harga) || 0,
-          satuan: l.satuan || '',
-          jenis: g.jenis,
-          diskon: Math.min(100, Math.max(0, Number(l.diskon) || 0))
-        });
-      }));
-    if (!lines.length) { UI.toast('Isi minimal satu baris pada salah satu kelompok.', 'warn'); return; }
-    if (!manualPatientId) { UI.toast('Pilih pasien.', 'warn'); return; }
-
-    /* Stok diperiksa sekali lagi tepat sebelum invoice dibuat: barang bisa
-       saja habis dipakai petugas lain setelah katalog dimuat. */
-    for (const g of GROUPS) {
-      for (const l of (manualLines[g.key] || [])) {
-        if (!g.inventoryJenis || !l.itemId) continue;
-        const stok = stokProduk(l.itemId);
-        if (stok <= 0) {
-          UI.toast(`Stok ${l.nama || 'produk'} habis. Tambah stok di Produk & Stok terlebih dahulu.`, 'danger');
-          return;
-        }
-        if (Number(l.qty) > stok) {
-          UI.toast(`Jumlah ${l.nama || 'produk'} melebihi stok tersisa (${angka(stok)}).`, 'danger');
-          return;
-        }
-      }
-    }
-    setManualBusy(true);
-    try {
-      const r = await API.createInvoice({
-        patientId: manualPatientId,
-        patientNama: selectedManualPatient && selectedManualPatient.identity ? (selectedManualPatient.identity.nama || '') : '',
-        visitId: manualVisitId || '',
-        lines,
-        diskon: Number(manualDiskon) || 0,
-        catatan: manualCatatan,
-        layanan: manualLayanan,
-        rekomendasi: manualLayanan === 'onsite' ? rekomendasiTampil : ''
-      });
-      setManualOpen(false);
-      UI.toast('Invoice dibuat: ' + (r.invoice ? r.invoice.nomor : ''), 'ok');
-      muat();
-      if (r.invoice) bukaDetail(r.invoice);
-    } catch (e) {
-      UI.toast((e && e.message) || 'Gagal membuat invoice.', 'danger');
-    } finally {
-      setManualBusy(false);
-    }
-  }
+  /* Tab Grafik Tren mengirim "Buat Invoice" ke sini lewat state navigasi
+     (pasien & kunjungan sudah terpilih). Formulir langsung dibuka, lalu
+     state-nya dibersihkan supaya memuat ulang halaman tidak membukanya lagi. */
+  useEffect(() => {
+    const st = loc.state;
+    if (!st || !st.buat) return;
+    bukaManual(st.patientId, st.visitId);
+    nav(loc.pathname, { replace: true, state: null });
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [loc.state]);
 
   useEffect(() => {
     if (!detailOpen) return;
@@ -491,23 +327,6 @@ export default function BillingPage() {
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [detailOpen]);
-
-  useEffect(() => {
-    if (!manualOpen) return;
-    let aktif = true;
-    setManualItemsError('');
-    API.listItems({ aktif: 1 })
-      .then(d => { if (aktif) setManualItems(Array.isArray(d.items) ? d.items : []); })
-      .catch(e => { if (aktif) setManualItemsError((e && e.message) || 'Katalog produk tidak dapat dimuat.'); });
-    return () => { aktif = false; };
-  }, [manualOpen]);
-
-  useEffect(() => {
-    if (!manualOpen) return;
-    const onKey = (e) => { if (e.key === 'Escape') setManualOpen(false); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [manualOpen]);
 
   return (
     <main className="view" id="view-billing">
@@ -626,14 +445,34 @@ export default function BillingPage() {
             </div>
             <div className="modal__body">
               {detailErr ? <Callout tone="danger"><strong>Gagal</strong>{detailErr}</Callout> : null}
-              {!detailInv && !detailErr ? <div className="field__hint">Memuat…</div> : null}
+              {!detailInv && !detailErr ? (
+                detailRingkas ? (
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
+                      <div>
+                        <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 16 }}>{detailRingkas.nomor}</div>
+                        <div style={{ fontSize: 12, color: 'var(--c-text-muted)' }}>
+                          {UI.fmtDate(detailRingkas.tanggal)} · {detailRingkas.patient_nama || '?'} · {detailRingkas.layanan === 'homecare' ? 'Home Care' : 'Onsite'}
+                        </div>
+                      </div>
+                      <Badge tone={statusTone(detailRingkas.status)}>{statusLabel(detailRingkas.status)}</Badge>
+                    </div>
+                    <div style={{ marginTop: 10, textAlign: 'right', fontSize: '1em' }}>
+                      <div>Total: <b>{rupiah(detailRingkas.total)}</b></div>
+                      <div>Dibayar: <b>{rupiah(detailRingkas.dibayar)}</b></div>
+                      <div>Sisa: <b>{rupiah(Number(detailRingkas.total) - Number(detailRingkas.dibayar))}</b></div>
+                    </div>
+                    <div className="field__hint" style={{ marginTop: 12 }}>Memuat rincian baris…</div>
+                  </div>
+                ) : <div className="field__hint">Memuat…</div>
+              ) : null}
               {detailInv ? <AreaKuitansi inv={detailInv} clinic={clinic} /> : null}
               {detailInv ? (
                 <div className="print-area">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10, gap: 8, flexWrap: 'wrap' }}>
                     <div>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 16 }}>{detailInv.nomor}</div>
-                      <div style={{ fontSize: 12, color: 'var(--c-text-muted)' }}>{UI.fmtDate(detailInv.tanggal)} · {detailInv.patient_nama || '?'} · {detailInv.layanan === 'homecare' ? 'Home Care' : 'Onsite'}</div>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '1.35em' }}>{detailInv.nomor}</div>
+                      <div style={{ fontSize: '0.92em', color: 'var(--c-text-muted)' }}>{UI.fmtDate(detailInv.tanggal)} · {detailInv.patient_nama || '?'} · {detailInv.layanan === 'homecare' ? 'Home Care' : 'Onsite'}</div>
                     </div>
                     <Badge tone={statusTone(detailInv.status)}>{statusLabel(detailInv.status)}</Badge>
                   </div>
@@ -663,22 +502,22 @@ export default function BillingPage() {
                     </tbody>
                   </table>
 
-                  <div style={{ marginTop: 10, textAlign: 'right', fontSize: 13 }}>
+                  <div style={{ marginTop: 10, textAlign: 'right', fontSize: '1em' }}>
                     <div>Subtotal: <b>{rupiah(invHitung.kotor)}</b></div>
                     {invHitung.totalDiskon > 0 ? <div>Total Diskon: <b>{rupiah(invHitung.totalDiskon)}</b></div> : null}
-                    <div style={{ fontSize: 15 }}>Total: <b>{rupiah(detailInv.total)}</b></div>
+                    <div style={{ fontSize: '1.15em' }}>Total: <b>{rupiah(detailInv.total)}</b></div>
                     <div>Dibayar: <b>{rupiah(detailInv.dibayar)}</b></div>
                     <div>Sisa: <b>{rupiah(Number(detailInv.total) - Number(detailInv.dibayar))}</b></div>
                   </div>
 
                   {detailInv.rekomendasi ? (
-                    <div style={{ marginTop: 12, fontSize: 13 }}>
+                    <div style={{ marginTop: 12, fontSize: '1em' }}>
                       <strong>Rekomendasi</strong>
                       <div>{detailInv.rekomendasi}</div>
                     </div>
                   ) : null}
                   {detailInv.catatan ? (
-                    <div style={{ marginTop: 10, fontSize: 13 }}>
+                    <div style={{ marginTop: 10, fontSize: '1em' }}>
                       <strong>Keterangan</strong>
                       <div>{detailInv.catatan}</div>
                     </div>
@@ -686,7 +525,7 @@ export default function BillingPage() {
 
                   {(detailInv.payments || []).length ? (
                     <div style={{ marginTop: 14 }}>
-                      <strong style={{ fontSize: 13 }}>Riwayat Pembayaran</strong>
+                      <strong style={{ fontSize: '1em' }}>Riwayat Pembayaran</strong>
                       <table className="inv-detail-lines" style={{ marginTop: 6 }}>
                         <thead>
                           <tr>
@@ -712,7 +551,7 @@ export default function BillingPage() {
 
                   {detailInv.status !== 'batal' && Number(detailInv.total) - Number(detailInv.dibayar) > 0 ? (
                     <div style={{ marginTop: 14 }}>
-                      <strong style={{ fontSize: 13 }}>Catat Pembayaran</strong>
+                      <strong style={{ fontSize: '1em' }}>Catat Pembayaran</strong>
                       <div className="inv-pay-form">
                         <div className="field" style={{ margin: 0 }}>
                           <label className="field__label">Tanggal</label>
@@ -747,9 +586,17 @@ export default function BillingPage() {
                 </div>
               ) : null}
             </div>
-            <div className="modal__foot">
+            <div className="modal__foot modal__foot--cetak">
               {detailInv ? (
                 <>
+                  <label className="print-size" title="Ukuran kertas untuk invoice & kuitansi">
+                    <span>Kertas</span>
+                    <select value={kertas} onChange={e => setKertas(e.target.value)} aria-label="Ukuran kertas cetak">
+                      <option value="a4">A4</option>
+                      <option value="a5">A5</option>
+                      <option value="a6">A6</option>
+                    </select>
+                  </label>
                   <button className="btn" onClick={cetakInvoice}>Cetak Invoice</button>
                   <button className="btn" onClick={cetakKuitansi}>Cetak Kuitansi</button>
                   {isAdmin && detailInv.status !== 'batal' ? (
@@ -763,198 +610,15 @@ export default function BillingPage() {
         </div>
       ) : null}
 
-      {manualOpen ? (
-        <div className="modal-backdrop" onMouseDown={(e) => { if (e.target.classList.contains('modal-backdrop')) setManualOpen(false); }}>
-          <div className="modal modal--wide" onClick={(e) => e.stopPropagation()}>
-            <div className="modal__head">
-              <h2>Input Invoice</h2>
-              <button className="modal__x" onClick={() => setManualOpen(false)}>&times;</button>
-            </div>
-            <div className="modal__body">
-              <div className="form-row form-row--2">
-                <div className="field">
-                  <label className="field__label">Pasien</label>
-                  <select value={manualPatientId} onChange={e => pilihPasienInvoice(e.target.value)}>
-                    <option value="">— Pilih pasien —</option>
-                    {(patients || []).map(p => (
-                      <option key={p.id} value={p.id}>{p.identity && p.identity.nama ? p.identity.nama : p.id}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="field">
-                  <label className="field__label">Kunjungan (opsional)</label>
-                  <select value={manualVisitId} onChange={e => pilihKunjunganInvoice(e.target.value)} disabled={!selectedManualPatient}>
-                    <option value="">— Tanpa kunjungan —</option>
-                    {manualVisitsTerbaru.map(v => (
-                      <option key={v.id} value={v.id}>{v.date ? UI.fmtDate(v.date) : v.id}{v.time ? ' ' + v.time : ''}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="form-row form-row--2" style={{ marginTop: 14 }}>
-                <div className="field">
-                  <label className="field__label">Jenis Layanan</label>
-                  <select value={manualLayanan} onChange={e => setManualLayanan(e.target.value)}>
-                    <option value="onsite">Onsite (di klinik)</option>
-                    <option value="homecare">Home Care</option>
-                  </select>
-                </div>
-                {manualLayanan === 'onsite' ? (
-                  <div className="field">
-                    <label className="field__label">Kontrol Selanjutnya</label>
-                    <input
-                      type="date"
-                      value={kontrolTampil}
-                      onChange={e => {
-                        setManualKontrol(e.target.value);
-                        setManualRekomendasi('');
-                      }}
-                      title={visitDasar && visitDasar.date
-                        ? 'Usulan 7 hari setelah kunjungan ' + UI.fmtDate(visitDasar.date)
-                        : 'Usulan 7 hari setelah hari ini'}
-                    />
-                    <small className="field__hint">
-                      {selectedManualPatient
-                        ? 'Usulan otomatis 7 hari setelah kunjungan; ubah bila perlu.'
-                        : 'Pilih pasien untuk menghitung kunjungan.'}
-                    </small>
-                  </div>
-                ) : <div />}
-              </div>
-
-              {manualLayanan === 'onsite' ? (
-                <div className="field" style={{ marginTop: 10 }}>
-                  <label className="field__label">Rekomendasi</label>
-                  <input
-                    type="text"
-                    value={rekomendasiTampil}
-                    onChange={e => setManualRekomendasi(e.target.value)}
-                    placeholder={selectedManualPatient ? 'Kunjungan ke-… dan kontrol selanjutnya …' : 'Pilih pasien untuk menghitung kunjungan'}
-                  />
-                </div>
-              ) : null}
-
-              {manualItemsError ? <Callout tone="danger"><strong>Katalog produk</strong>{manualItemsError} Tidak dapat membuat invoice berbasis produk stok sampai katalog bisa dimuat.</Callout> : null}
-              {GROUPS.filter(g => !(g.homecareOnly && manualLayanan !== 'homecare')).map(g => (
-                <div className="inv-group" key={g.key}>
-                  <div className="inv-group__head">
-                    <strong>{g.label}</strong>
-                    <button className="btn btn--sm" type="button" onClick={() => addManualLine(g.key)}>+ Baris</button>
-                  </div>
-                  {g.inventoryJenis ? null : (
-                    <datalist id={`dl-${g.key}`}>
-                      {g.contoh.map(c => <option key={c} value={c} />)}
-                    </datalist>
-                  )}
-                  <div className="inv-line inv-line--head" aria-hidden="true">
-                    <span>{g.inventoryJenis ? 'Produk / Nama' : 'Nama'}</span><span>Qty</span><span>Harga (Rp)</span><span>Diskon %</span><span></span>
-                  </div>
-                  {(manualLines[g.key] || []).map((line, i) => {
-                    const produkGrup = produkGrupUntuk(g);
-                    const produkTerpilih = line.itemId
-                      ? produkGrup.find(item => String(item.id) === String(line.itemId))
-                      : null;
-                    const hargaBaris = g.inventoryJenis
-                      ? (produkTerpilih ? Number(produkTerpilih.harga_jual) || 0 : 0)
-                      : line.harga;
-                    return (
-                    <div key={i} className="inv-line">
-                      <div className="field" style={{ margin: 0 }}>
-                        {g.inventoryJenis ? (
-                          <select
-                            value={line.itemId || ''}
-                            aria-label={`Pilih ${g.label}`}
-                            onChange={e => pilihProdukBaris(g, i, e.target.value)}
-                          >
-                            <option value="">
-                              {manualItemsError
-                                ? 'Katalog produk tidak tersedia'
-                                : (produkGrup.length ? '— Pilih produk —' : 'Belum ada produk di Produk & Stok')}
-                            </option>
-                            {produkGrup.map(item => {
-                              const habis = Number(item.stok) <= 0;
-                              return (
-                                <option key={item.id} value={item.id}>
-                                  {item.nama} · {habis ? 'stok habis' : 'stok ' + angka(item.stok)} · {rupiah(item.harga_jual)}
-                                </option>
-                              );
-                            })}
-                          </select>
-                        ) : (
-                          <input
-                            type="text"
-                            list={`dl-${g.key}`}
-                            placeholder={g.contoh[0]}
-                            value={line.nama}
-                            aria-label={`Nama ${g.label}`}
-                            onChange={e => updateManualLine(g.key, i, { nama: e.target.value })}
-                          />
-                        )}
-                      </div>
-                      <div className="field" style={{ margin: 0 }}>
-                        <input type="number" min="1" value={line.qty}
-                          aria-label="Qty"
-                          onChange={e => ubahQtyBaris(g, i, e.target.value)} />
-                      </div>
-                      <div className="field" style={{ margin: 0 }}>
-                        <input type="number" min="0" placeholder="0" value={hargaBaris}
-                          disabled={!!g.inventoryJenis}
-                          title={g.inventoryJenis ? 'Harga jual mengikuti produk pada Produk & Stok.' : undefined}
-                          onChange={e => updateManualLine(g.key, i, { harga: e.target.value })} />
-
-                      </div>
-                      <div className="field" style={{ margin: 0 }}>
-                        <input type="number" min="0" max="100" value={line.diskon}
-                          aria-label="Diskon persen"
-                          onChange={e => updateManualLine(g.key, i, { diskon: e.target.value })} />
-                      </div>
-                      <button
-                        className="btn btn--sm btn--danger"
-                        type="button"
-                        onClick={() => removeManualLine(g.key, i)}
-                        disabled={(manualLines[g.key] || []).length <= 1}
-                      >×</button>
-                    </div>
-                  );
-                  })}
-                </div>
-              ))}
-
-              <div className="form-row form-row--2" style={{ marginTop: 14 }}>
-                <div className="field">
-                  <label className="field__label">Diskon Tambahan (Rp)</label>
-                  <input type="number" min="0" value={manualDiskon} onChange={e => setManualDiskon(e.target.value)} />
-                </div>
-                <div className="field">
-                  <label className="field__label">Catatan / Keterangan</label>
-                  <input
-                    type="text"
-                    value={manualCatatan}
-                    onChange={e => setManualCatatan(e.target.value)}
-                    placeholder="Contoh: Transfer bank BCA an. …"
-                  />
-                </div>
-              </div>
-
-              <div className="inv-recap">
-                <div><span>Subtotal</span><b>{rupiah(manualHitung.kotor)}</b></div>
-                <div><span>Diskon baris</span><b>{rupiah(manualHitung.diskonBaris)}</b></div>
-                {Number(manualDiskon) > 0 ? (
-                  <div><span>Diskon tambahan</span><b>{rupiah(manualDiskon)}</b></div>
-                ) : null}
-                <div className="inv-recap__total"><span>Total</span><b>{rupiah(manualHitung.total)}</b></div>
-              </div>
-            </div>
-            <div className="modal__foot">
-              <button className="btn" onClick={() => setManualOpen(false)} disabled={manualBusy}>Batal</button>
-              <button className="btn btn--primary" onClick={simpanManual} disabled={manualBusy}>
-                {manualBusy ? 'Menyimpan…' : 'Buat Invoice'}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <InputInvoiceModal
+        key={manualSeed.n}
+        open={manualOpen}
+        onClose={() => setManualOpen(false)}
+        patients={patients}
+        initialPatientId={manualSeed.patientId}
+        initialVisitId={manualSeed.visitId}
+        onCreated={(inv) => { muat(); if (inv) bukaDetail(inv); }}
+      />
     </main>
   );
 }

@@ -515,23 +515,33 @@ const routes = {
    * laporan oleh siapa pun yang memegang sesi.
    */
   'GET /api/invoices': async (req, res, q) => {
-    const u = await currentUser(req); if (!u) return json(res, 401, { error: 'Belum masuk.' });
     try {
-      json(res, 200, {
-        invoices: await db.listInvoices({
+      /* Sesi dan daftar diambil bersamaan: tidak saling bergantung, dan tiap
+         query ke basis data berjarak jauh (±270 ms). */
+      const [u, invoices] = await Promise.all([
+        currentUser(req),
+        db.listInvoices({
           from: q.get('from') || '',
           to: q.get('to') || '',
           status: q.get('status') || '',
           patientId: q.get('patientId') || '',
+          visitId: q.get('visitId') || '',
           limit: q.get('limit') || 200
         })
-      });
+      ]);
+      if (!u) return json(res, 401, { error: 'Belum masuk.' });
+      json(res, 200, { invoices });
     } catch (e) { json(res, 400, { error: e.message }); }
   },
 
   'GET /api/invoice': async (req, res, q) => {
-    const u = await currentUser(req); if (!u) return json(res, 401, { error: 'Belum masuk.' });
-    const inv = await db.getInvoice(String(q.get('id') || ''));
+    /* Cek sesi dan ambil invoice sekaligus: keduanya tidak saling
+       bergantung, dan basis data berjarak jauh (±270 ms per query). */
+    const [u, inv] = await Promise.all([
+      currentUser(req),
+      db.getInvoice(String(q.get('id') || ''))
+    ]);
+    if (!u) return json(res, 401, { error: 'Belum masuk.' });
     if (!inv) return json(res, 404, { error: 'Invoice tidak ditemukan.' });
     json(res, 200, { invoice: inv });
   },
@@ -845,6 +855,13 @@ module.exports.handler = handler;
 if (require.main === module) {
   db.ready()
     .then(() => db.purgeSessions())
+    .then(() => db.warm())
+    .then(() => {
+      /* Jaga koneksi tetap hangat. Pooler menutup koneksi yang menganggur,
+         dan koneksi dingin itulah yang membuat permintaan pertama setelah
+         jeda terasa menggantung. Interval ini hanya mode lokal. */
+      setInterval(() => { db.warm(); }, 20000).unref();
+    })
     .catch(e => { console.error('[db] gagal:', e.message); });
 
   http.createServer(handler).listen(PORT, () => {

@@ -34,7 +34,10 @@ const DATABASE_URL = process.env.DATABASE_URL || '';
 const pool = new Pool({
   connectionString: DATABASE_URL,
   max: 10,
-  idleTimeoutMillis: 30000,
+  /* Koneksi menganggur tidak langsung ditutup: biaya membuka koneksi ke
+     basis data berjarak jauh (±2 detik) jauh lebih mahal daripada
+     menahan satu koneksi tetap terbuka. */
+  idleTimeoutMillis: 120000,
   connectionTimeoutMillis: 10000,
   ssl: DATABASE_URL && !/localhost|127\.0\.0\.1/.test(DATABASE_URL)
     ? { rejectUnauthorized: false }
@@ -44,6 +47,20 @@ const pool = new Pool({
 pool.on('error', (e) => {
   console.error('[db] kesalahan pool (koneksi idle terputus):', e.message);
 });
+
+/* Menyiapkan satu koneksi hangat di pool. Basis data berjarak jauh: koneksi
+   pertama butuh TCP + TLS + handshake (±2 detik), dan itulah yang membuat
+   permintaan pertama setelah server dinyalakan terasa menggantung — kasir
+   menekan baris invoice dan modal diam beberapa detik. */
+async function warm() {
+  try {
+    await pool.query('SELECT 1');
+    return true;
+  } catch (e) {
+    console.error('[db] gagal memanaskan pool:', e.message);
+    return false;
+  }
+}
 
 /* ---------- Skema ---------- */
 
@@ -1776,20 +1793,22 @@ async function createInvoice({ patientId, patientNama, visitId, lines, diskon, c
 
 async function getInvoice(id) {
   await ready();
-  const r = await pool.query('SELECT * FROM invoices WHERE id = $1', [String(id)]);
+  /* Ketiga query dijalankan BERSAMAAN dengan id yang sama (tidak perlu
+     menunggu invoice-nya dulu). Basis datanya berjarak jauh — satu query
+     ±270 ms — sehingga versi berurutan dulu makan ~0,8 detik hanya untuk
+     membuka rincian satu invoice. */
+  const kunci = String(id);
+  const [r, l, p] = await Promise.all([
+    pool.query('SELECT * FROM invoices WHERE id = $1', [kunci]),
+    pool.query('SELECT * FROM invoice_lines WHERE invoice_id = $1 ORDER BY urut, id', [kunci]),
+    pool.query('SELECT * FROM payments WHERE invoice_id = $1 ORDER BY tanggal, pada, id', [kunci])
+  ]);
   const inv = r.rows[0];
   if (!inv) return null;
-
-  const l = await pool.query(
-    'SELECT * FROM invoice_lines WHERE invoice_id = $1 ORDER BY urut, id', [inv.id]
-  );
-  const p = await pool.query(
-    'SELECT * FROM payments WHERE invoice_id = $1 ORDER BY tanggal, pada, id', [inv.id]
-  );
   return Object.assign({}, inv, { lines: l.rows, payments: p.rows });
 }
 
-async function listInvoices({ from, to, status, patientId, limit } = {}) {
+async function listInvoices({ from, to, status, patientId, visitId, limit } = {}) {
   await ready();
   const syarat = [];
   const nilai = [];
@@ -1800,6 +1819,7 @@ async function listInvoices({ from, to, status, patientId, limit } = {}) {
     nilai.push(String(status)); syarat.push('status = $' + nilai.length);
   }
   if (patientId) { nilai.push(String(patientId)); syarat.push('patient_id = $' + nilai.length); }
+  if (visitId) { nilai.push(String(visitId)); syarat.push('visit_id = $' + nilai.length); }
 
   const n = Math.min(Math.max(parseInt(limit, 10) || 200, 1), 1000);
   nilai.push(n);
@@ -2249,7 +2269,7 @@ async function saveClinicConfig(cfg, fallback) {
 }
 
 module.exports = {
-  open, ready, close, stats, snapshot, exportSnapshot,
+  open, ready, close, warm, stats, snapshot, exportSnapshot,
   backupManifest, photoStream,
   getClinicConfig, saveClinicConfig,
   hashPassword, verifyPassword,

@@ -28,10 +28,13 @@
    ========================================================== */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import { FieldProvider } from '../core/field-binding.jsx';
-import { Store, UI, Photos, Scales, Charts } from '../lib/index.js';
+import { Store, UI, Photos, Scales, Charts, API } from '../lib/index.js';
 import { Badge, EmptyState } from '../components/ui.jsx';
+import InputInvoiceModal from '../components/invoice-form.jsx';
+import '../styles/billing.css';
 
 const TINGGI = 320;   // opts.height di refreshers.grafik()
 
@@ -362,6 +365,122 @@ function KartuGrafik({ patient, s }) {
 }
 
 /* ==========================================================
+   Kartu 6a — Invoice pasien, disandingkan dengan grafik
+   ==========================================================
+   Permintaan klien: "Invoice-nya dimasukkan juga di samping grafik
+   tren", supaya saat membahas perkembangan luka, riwayat tagihan
+   pasien terlihat pada layar yang sama.
+
+   Datanya di server PostgreSQL (tabel invoice), bukan di Store, jadi
+   diambil lewat API seperti halaman Kasir. Tombol Buat Invoice membuka
+   formulir Kasir dengan pasien & kunjungan ini sudah terpilih. */
+
+function statusTone(s) {
+  if (s === 'lunas') return 'ok';
+  if (s === 'sebagian') return 'warn';
+  if (s === 'batal') return 'muted';
+  return 'info';
+}
+function statusLabel(s) {
+  if (s === 'lunas') return 'Lunas';
+  if (s === 'sebagian') return 'Sebagian';
+  if (s === 'batal') return 'Batal';
+  return 'Belum';
+}
+function rupiahRingkas(n) { return 'Rp ' + Number(n || 0).toLocaleString('id-ID'); }
+
+function KartuInvoice({ patient, visit }) {
+  const nav = useNavigate();
+  const visitId = visit ? visit.id : '';
+  const [daftar, setDaftar] = useState(null);
+  const [err, setErr] = useState(null);
+  /* Formulir invoice dibuka di layar ini — tidak perlu pindah ke Kasir. */
+  const [formOpen, setFormOpen] = useState(false);
+  const [versi, setVersi] = useState(0);
+
+  useEffect(() => {
+    if (!visitId) { setDaftar([]); setErr(null); return undefined; }
+    let aktif = true;
+    setDaftar(null);
+    setErr(null);
+    /* Hanya invoice milik kunjungan yang sedang dibuka — bukan seluruh
+       riwayat pasien. */
+    API.listInvoices({ visitId, limit: 5 })
+      .then(d => { if (aktif) setDaftar(Array.isArray(d.invoices) ? d.invoices : []); })
+      .catch(e => { if (aktif) setErr((e && e.message) || 'Gagal memuat invoice.'); });
+    return () => { aktif = false; };
+  }, [visitId, versi]);
+
+  /* Invoice batal tidak ditampilkan sebagai tagihan kunjungan. */
+  const tagihan = (daftar || []).filter(i => i.status !== 'batal');
+  const nominal = inv => Math.max(0, (Number(inv.total) || 0) - (Number(inv.dibayar) || 0));
+
+  return (
+    <div className="card">
+      <div className="card__head">
+        <span className="num">6a</span>
+        <h2>Invoice Pasien</h2>
+      </div>
+      <div className="card__body">
+        {err ? (
+          <div className="callout"><strong>Gagal memuat invoice</strong>{err}</div>
+        ) : null}
+
+        {!visitId ? (
+          <div className="field__hint" style={{ padding: '4px 0 10px' }}>
+            Belum ada kunjungan yang dibuka. Invoice tampil untuk kunjungan
+            yang sedang aktif di halaman ini.
+          </div>
+        ) : null}
+
+        {visitId && !err && daftar === null ? (
+          <div className="field__hint">Memuat invoice kunjungan ini…</div>
+        ) : null}
+
+        {visitId && !err && daftar && tagihan.length === 0 ? (
+          <div className="field__hint" style={{ padding: '4px 0 10px' }}>
+            Belum ada invoice untuk kunjungan ini.
+          </div>
+        ) : null}
+
+        {tagihan.map(inv => (
+          <div className="inv-kunjungan" key={inv.id}>
+            <div className="inv-kunjungan__head">
+              <span>{inv.nomor}</span>
+              <Badge tone={statusTone(inv.status)}>{statusLabel(inv.status)}</Badge>
+            </div>
+            <div className="inv-baris"><span>Tanggal</span><b>{UI.fmtDate(inv.tanggal)}</b></div>
+            <div className="inv-baris"><span>Layanan</span><b>{inv.layanan === 'homecare' ? 'Home Care' : 'Onsite'}</b></div>
+            <div className="inv-baris"><span>Total</span><b>{rupiahRingkas(inv.total)}</b></div>
+            <div className="inv-baris"><span>Dibayar</span><b>{rupiahRingkas(inv.dibayar)}</b></div>
+            <div className="inv-baris inv-baris--sisa"><span>Belum dibayar</span><b>{rupiahRingkas(nominal(inv))}</b></div>
+          </div>
+        ))}
+
+        <div className="btn-group" style={{ marginTop: 12 }}>
+          {visitId && !tagihan.length ? (
+            <button className="btn btn--sm btn--primary" onClick={() => setFormOpen(true)}>
+              + Buat Invoice
+            </button>
+          ) : null}
+          <button className="btn btn--sm" onClick={() => nav('/kasir')}>Buka Kasir</button>
+        </div>
+      </div>
+
+      {/* Pasien dikunci pada pasien yang sedang dibuka; kunjungannya sudah
+          terpilih sehingga tinggal mengisi baris tagihan. */}
+      <InputInvoiceModal
+        open={formOpen}
+        onClose={() => setFormOpen(false)}
+        patients={[patient]}
+        initialPatientId={patient.id}
+        initialVisitId={visitId}
+        onCreated={() => { setFormOpen(false); setVersi(v => v + 1); }}
+      />
+    </div>
+  );
+}
+/* ==========================================================
    Kartu 6b — Status kondisi luka (bilah 1 .. 55)
    ========================================================== */
 
@@ -535,7 +654,13 @@ export default function GrafikTab({ patient, visit }) {
      */
     <FieldProvider patient={patient} visit={visit}>
       <div id="form-grafik">
-        <KartuGrafik patient={patient} s={s} />
+        {/* Grafik dan invoice berdampingan: riwayat tagihan terbaca pada
+            layar yang sama dengan tren luka. Menjadi satu kolom di layar
+            sempit supaya keduanya tetap terbaca. */}
+        <div className="grafik-grid">
+          <KartuGrafik patient={patient} s={s} />
+          <KartuInvoice patient={patient} visit={visit} />
+        </div>
         <KartuStatus s={s} />
         <KartuRiwayat patient={patient} />
         <KartuTimeline patient={patient} />
