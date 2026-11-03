@@ -525,7 +525,7 @@ export default function App() {
      menu pengelolaan yang hanya muncul untuk admin. */
   const halaman = [
     { to: '/', icon: 'activity', label: 'Dashboard' },
-    { to: '/pasien', icon: 'user', label: 'Mitra' },
+    { to: '/pasien', icon: 'user', label: 'Daftar Pasien' },
     { to: '/kasir', icon: 'receipt', label: 'Kasir & Invoice' },
     { to: '/persediaan', icon: 'box', label: 'Produk & Stok' }
   ];
